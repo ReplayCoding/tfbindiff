@@ -6,3 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+gimli = "0.28.0"
+goblin = "0.7.1"
+object = "0.31.1"
