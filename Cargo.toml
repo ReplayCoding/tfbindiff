@@ -8,4 +8,6 @@ edition = "2021"
 [dependencies]
 byteorder = "1.4.3"
 getopts = "0.2.21"
+leb128 = "0.2.5"
 object = "0.31.1"
+thiserror = "1.0.48"
