@@ -4,7 +4,7 @@ use std::io::ErrorKind;
 
 use byteorder::ByteOrder;
 use byteorder::ReadBytesExt;
-use leb128;
+
 
 use std::io::Cursor;
 use std::io::Read;
@@ -58,36 +58,36 @@ pub enum EhPointerApplication {
 #[derive(Debug, Error)]
 pub enum EhFrameError {
     #[error("IO error: {0}")]
-    IoError(io::Error),
+    Io(io::Error),
     #[error("LEB decode error: {0}")]
-    LebError(leb128::read::Error),
+    Leb(leb128::read::Error),
     #[error("pointer format decode error: {0}")]
-    PointerFormatDecodeError(TryFromPrimitiveError<EhPointerFormat>),
+    PointerFormatDecode(TryFromPrimitiveError<EhPointerFormat>),
     #[error("pointer application decode error: {0}")]
-    PointerApplicationDecodeError(TryFromPrimitiveError<EhPointerApplication>),
+    PointerApplicationDecode(TryFromPrimitiveError<EhPointerApplication>),
 }
 
 impl From<io::Error> for EhFrameError {
     fn from(value: io::Error) -> Self {
-        Self::IoError(value)
+        Self::Io(value)
     }
 }
 
 impl From<leb128::read::Error> for EhFrameError {
     fn from(value: leb128::read::Error) -> Self {
-        Self::LebError(value)
+        Self::Leb(value)
     }
 }
 
 impl From<TryFromPrimitiveError<EhPointerFormat>> for EhFrameError {
     fn from(value: TryFromPrimitiveError<EhPointerFormat>) -> Self {
-        Self::PointerFormatDecodeError(value)
+        Self::PointerFormatDecode(value)
     }
 }
 
 impl From<TryFromPrimitiveError<EhPointerApplication>> for EhFrameError {
     fn from(value: TryFromPrimitiveError<EhPointerApplication>) -> Self {
-        Self::PointerApplicationDecodeError(value)
+        Self::PointerApplicationDecode(value)
     }
 }
 
@@ -211,7 +211,7 @@ impl Cie {
         // field is only present if the Augmentation String contains the character 'z'.
         let mut augmentation_data_length = None;
 
-        if augmentation_string.contains("z") {
+        if augmentation_string.contains('z') {
             augmentation_data_length = Some(leb128::read::unsigned(data)?);
         }
 
@@ -436,7 +436,7 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
     // Skip over unread padding
     data.seek(io::SeekFrom::Current((length - n_bytes_read) as i64))?;
 
-    return Ok(Some(entry));
+    Ok(Some(entry))
 }
 
 pub fn get_fdes<Endian: ByteOrder, R: Read + Seek>(

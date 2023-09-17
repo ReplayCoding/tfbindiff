@@ -2,7 +2,7 @@ mod eh_frame;
 
 use crate::eh_frame::get_fdes;
 use byteorder::LittleEndian;
-use cpp_demangle;
+
 use object::{Object, ObjectSection};
 use std::env;
 use std::fs;
@@ -29,7 +29,7 @@ fn hexdump(data: &[u8], chunk_size: usize) {
             }
         }
 
-        print!("\n");
+        println!();
     }
 }
 
