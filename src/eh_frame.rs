@@ -100,12 +100,54 @@ pub struct Cie {
 #[derive(Debug)]
 pub struct Fde {
     pub begin: u64,
-    pub length: u64
+    pub length: u64,
 }
 
 pub enum EhFrameEntry {
     Cie(u64, Cie),
     Fde(Fde),
+}
+
+fn read_encoded_no_application<Endian: ByteOrder, R: Read + Seek>(
+    data: &mut R,
+    format: EhPointerFormat,
+    pointer_size: usize,
+) -> Result<i128, EhFrameError> {
+    Ok(match format {
+        EhPointerFormat::DW_EH_PE_absptr => match pointer_size {
+            4 => data.read_u32::<Endian>()?.into(),
+            _ => todo!("unhandled pointer size: {}", pointer_size),
+        },
+        EhPointerFormat::DW_EH_PE_sdata4 => data.read_i32::<Endian>()?.into(),
+
+        _ => todo!("unhandled format {:?}", format),
+    })
+}
+
+fn read_encoded<Endian: ByteOrder, R: Read + Seek>(
+    data: &mut R,
+    format: EhPointerFormat,
+    application: EhPointerApplication,
+    pointer_size: usize,
+    base_address: u64,
+) -> Result<u64, EhFrameError> {
+    let pcrel_offs = data.stream_position()?;
+    let unapplied_value = read_encoded_no_application::<Endian, _>(data, format, pointer_size)?;
+    let applied_value = match application {
+        EhPointerApplication::DW_EH_PE_pcrel => match pointer_size {
+            4 => {
+                let unapplied_value = unapplied_value as u32;
+                unapplied_value
+                    .wrapping_add((base_address + pcrel_offs) as u32)
+                    .into()
+            }
+            _ => todo!("unhandled pointer size: {}", pointer_size),
+        },
+
+        _ => todo!("unhandled application {:?}", application),
+    };
+
+    Ok(applied_value)
 }
 
 impl Cie {
@@ -214,6 +256,39 @@ impl Cie {
                         );
                     }
 
+                    // A 'L' may be present at any position after the first character of the
+                    // string. This character may only be present if 'z' is the first character of
+                    // the string. If present, it indicates the presence of one argument in the
+                    // Augmentation Data of the CIE, and a corresponding argument in the
+                    // Augmentation Data of the FDE. The argument in the Augmentation Data of the
+                    // CIE is 1-byte and represents the pointer encoding used for the argument in
+                    // the Augmentation Data of the FDE, which is the address of a
+                    // language-specific data area (LSDA). The size of the LSDA pointer is
+                    // specified by the pointer encoding used.
+                    'L' => {
+                        let _pointer_format = augmentation_data.read_u8()?;
+                    }
+
+                    // A 'P' may be present at any position after the first character of the string. This character may
+                    // only be present if 'z' is the first character of the string. If present, it indicates the
+                    // presence of two arguments in the Augmentation Data of the CIE. The first argument is 1-byte and
+                    // represents the pointer encoding used for the second argument, which is the address of a
+                    // personality routine handler. The personality routine is used to handle language and
+                    // vendor-specific tasks. The system unwind library interface accesses the language-specific
+                    // exception handling semantics via the pointer to the personality routine. The personality
+                    // routine does not have an ABI-specific name. The size of the personality routine pointer is
+                    // specified by the pointer encoding used.
+                    'P' => {
+                        let b = augmentation_data.read_u8()?;
+                        let pointer_format = EhPointerFormat::try_from(b & 0x0F)?;
+
+                        let _personality_routine = read_encoded_no_application::<Endian, _>(
+                            &mut augmentation_data,
+                            pointer_format,
+                            pointer_size,
+                        );
+                    }
+
                     // A 'R' may be present at any position after the first character of the
                     // string. This character may only be present if 'z' is the first character of
                     // the string. If present, The Augmentation Data shall include a 1 byte
@@ -245,49 +320,12 @@ impl Cie {
 }
 
 impl Fde {
-    fn read_encoded<Endian: ByteOrder, R: Read + Seek>(
-        data: &mut R,
-        format: EhPointerFormat,
-        application: EhPointerApplication,
-        pointer_size: usize,
-        base_address: u64,
-    ) -> Result<u64, EhFrameError> {
-        let pcrel_offs = data.stream_position()?;
-
-        let unapplied_value: u64 = match format {
-            EhPointerFormat::DW_EH_PE_absptr => {
-                match pointer_size {
-                    4 => data.read_u32::<Endian>()?.into(),
-                    _ => todo!("unhandled pointer size: {}", pointer_size)
-                }
-            }
-            _ => todo!("unhandled format {:?}", format),
-        };
-
-        let applied_value = match application {
-            EhPointerApplication::DW_EH_PE_pcrel => {
-                match pointer_size {
-                    4 => {
-                        let unapplied_value  = unapplied_value as u32;
-                        unapplied_value.wrapping_add((base_address + pcrel_offs) as u32).into()
-                    }
-                    _ => todo!("unhandled pointer size: {}", pointer_size)
-                    
-                }
-            }
-            
-            _ => todo!("unhandled application {:?}", application)
-        };
-
-        Ok(applied_value)
-    }
-
     fn parse<Endian: ByteOrder, R: Read + Seek>(
         data: &mut R,
         cie_pointer: u32,
         cies: &HashMap<u64, Cie>,
         pointer_size: usize,
-        base_address: u64
+        base_address: u64,
     ) -> Result<Fde, EhFrameError> {
         let offs = data.stream_position()?;
         assert_ne!(cie_pointer, 0, "cie_pointer should not be equal to 0");
@@ -300,14 +338,14 @@ impl Fde {
         // PC Begin
         // An encoded value that indicates the address of the initial location associated with this
         // FDE. The encoding format is specified in the Augmentation Data.
-        let pc_begin = Self::read_encoded::<Endian, _>(
+        let pc_begin = read_encoded::<Endian, _>(
             data,
             cie.fde_pointer_format
                 .expect("no pointer format in the CIE"),
             cie.fde_pointer_application
                 .expect("no pointer application in the CIE"),
             pointer_size,
-            base_address
+            base_address,
         )?;
 
         // PC Range
@@ -315,7 +353,7 @@ impl Fde {
         // this FDE.
         let pc_range: u64 = match pointer_size {
             4 => data.read_u32::<Endian>()?.into(),
-            _ => todo!("unhandled pointer size: {}", pointer_size)
+            _ => todo!("unhandled pointer size: {}", pointer_size),
         };
 
         Ok(Fde {
@@ -329,7 +367,7 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
     data: &mut R,
     pointer_size: usize,
     cies: &HashMap<u64, Cie>,
-    base_address: u64
+    base_address: u64,
 ) -> Result<Option<EhFrameEntry>, EhFrameError> {
     let entry_offset = data.stream_position()?;
 
@@ -378,7 +416,13 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
 
     let entry = match cie_id {
         0 => EhFrameEntry::Cie(entry_offset, Cie::parse::<Endian, _>(data, pointer_size)?),
-        _ => EhFrameEntry::Fde(Fde::parse::<Endian, _>(data, cie_id, cies, pointer_size, base_address)?),
+        _ => EhFrameEntry::Fde(Fde::parse::<Endian, _>(
+            data,
+            cie_id,
+            cies,
+            pointer_size,
+            base_address,
+        )?),
     };
 
     let n_bytes_read = data.stream_position()? - start_pos;
@@ -395,22 +439,25 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
     return Ok(Some(entry));
 }
 
-pub fn dump_eh_frame<Endian: ByteOrder, R: Read + Seek>(
+pub fn get_fdes<Endian: ByteOrder, R: Read + Seek>(
     data: &mut R,
     pointer_size: usize,
-    base_address: u64
-) -> Result<(), EhFrameError> {
+    base_address: u64,
+) -> Result<Vec<Fde>, EhFrameError> {
+    let mut fdes: Vec<Fde> = vec![];
     let mut cies: HashMap<u64, Cie> = HashMap::new();
 
-    while let Some(entry) = parse_eh_frame_entry::<Endian, _>(data, pointer_size, &cies, base_address)? {
+    while let Some(entry) =
+        parse_eh_frame_entry::<Endian, _>(data, pointer_size, &cies, base_address)?
+    {
         let end_pos = data.stream_position().unwrap();
         match entry {
             EhFrameEntry::Cie(offset, cie) => {
                 cies.insert(offset, cie);
             }
-            EhFrameEntry::Fde(fde) => println!("fde: {:08x} {:08x}", fde.begin, fde.length),
+            EhFrameEntry::Fde(fde) => fdes.push(fde),
         }
     }
 
-    Ok(())
+    Ok(fdes)
 }
