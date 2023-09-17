@@ -2,6 +2,7 @@ mod eh_frame;
 
 use crate::eh_frame::get_fdes;
 use byteorder::LittleEndian;
+use cpp_demangle;
 use object::{Object, ObjectSection};
 use std::env;
 use std::fs;
@@ -32,6 +33,12 @@ fn hexdump(data: &[u8], chunk_size: usize) {
     }
 }
 
+fn demangle_symbol(name: &str) -> Option<String> {
+    let sym = cpp_demangle::Symbol::new(name).ok()?;
+
+    sym.demangle(&cpp_demangle::DemangleOptions::new()).ok()
+}
+
 fn main() {
     for (i, arg) in env::args().enumerate() {
         if i == 1 {
@@ -57,10 +64,19 @@ fn main() {
                 eh_frame.address(),
             )
             .unwrap();
+
             let symbol_map = object.symbol_map();
             for fde in fdes {
                 if let Some(symbol) = symbol_map.get(fde.begin) {
-                    println!("function {} has length {}", symbol.name(), fde.length);
+                    let mut name: String = symbol.name().to_string();
+                    if let Some(demangled_name) = demangle_symbol(&name) {
+                        name = demangled_name
+                    };
+
+                    println!("function {} (@{:08x}) has length {}", name, fde.begin, fde.length);
+                }
+                else {
+                    println!("function {} (length {}) has no symbol", fde.begin, fde.length);
                 }
             }
         }

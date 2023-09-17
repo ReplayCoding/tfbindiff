@@ -450,7 +450,6 @@ pub fn get_fdes<Endian: ByteOrder, R: Read + Seek>(
     while let Some(entry) =
         parse_eh_frame_entry::<Endian, _>(data, pointer_size, &cies, base_address)?
     {
-        let end_pos = data.stream_position().unwrap();
         match entry {
             EhFrameEntry::Cie(offset, cie) => {
                 cies.insert(offset, cie);
