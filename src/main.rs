@@ -49,14 +49,15 @@ fn main() {
             }
             let eh_frame = object
                 .section_by_name(".eh_frame")
-                .unwrap()
+                .unwrap();
+            let eh_frame_data = eh_frame
                 .uncompressed_data()
                 .unwrap();
             // hexdump(&eh_frame, 16);
             //
             let pointer_size = if object.is_64() { 8 } else { 4 };
 
-            dump_eh_frame::<LittleEndian, _>(&mut Cursor::new(eh_frame), pointer_size).unwrap()
+            dump_eh_frame::<LittleEndian, _>(&mut Cursor::new(eh_frame_data), pointer_size, eh_frame.address()).unwrap()
         }
     }
 }

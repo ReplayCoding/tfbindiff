@@ -12,11 +12,11 @@ use std::io::Seek;
 
 use num_enum::TryFromPrimitiveError;
 
-use thiserror::Error;
 use num_enum::TryFromPrimitive;
+use thiserror::Error;
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, TryFromPrimitive)]
+#[derive(Debug, TryFromPrimitive, Clone, Copy)]
 #[repr(u8)]
 pub enum EhPointerFormat {
     // The Value is a literal pointer whose size is determined by the architecture.
@@ -40,7 +40,7 @@ pub enum EhPointerFormat {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, TryFromPrimitive)]
+#[derive(Debug, TryFromPrimitive, Clone, Copy)]
 #[repr(u8)]
 pub enum EhPointerApplication {
     // Value is relative to the current program counter.
@@ -91,15 +91,20 @@ impl From<TryFromPrimitiveError<EhPointerApplication>> for EhFrameError {
     }
 }
 
-
-struct Cie {
+#[derive(Debug)]
+pub struct Cie {
     pub fde_pointer_format: Option<EhPointerFormat>,
     pub fde_pointer_application: Option<EhPointerApplication>,
 }
-struct Fde {}
 
-enum EhFrameEntry {
-    Cie(Cie),
+#[derive(Debug)]
+pub struct Fde {
+    pub begin: u64,
+    pub length: u64
+}
+
+pub enum EhFrameEntry {
+    Cie(u64, Cie),
     Fde(Fde),
 }
 
@@ -134,7 +139,6 @@ impl Cie {
         if augmentation_string.contains("eh") {
             _eh = Some(match pointer_size {
                 4 => data.read_u32::<Endian>()?.into(),
-                8 => data.read_u64::<Endian>()?,
                 _ => todo!("Unhandled pointer size: {}", pointer_size),
             });
         }
@@ -241,18 +245,94 @@ impl Cie {
 }
 
 impl Fde {
+    fn read_encoded<Endian: ByteOrder, R: Read + Seek>(
+        data: &mut R,
+        format: EhPointerFormat,
+        application: EhPointerApplication,
+        pointer_size: usize,
+        base_address: u64,
+    ) -> Result<u64, EhFrameError> {
+        let pcrel_offs = data.stream_position()?;
+
+        let unapplied_value: u64 = match format {
+            EhPointerFormat::DW_EH_PE_absptr => {
+                match pointer_size {
+                    4 => data.read_u32::<Endian>()?.into(),
+                    _ => todo!("unhandled pointer size: {}", pointer_size)
+                }
+            }
+            _ => todo!("unhandled format {:?}", format),
+        };
+
+        let applied_value = match application {
+            EhPointerApplication::DW_EH_PE_pcrel => {
+                match pointer_size {
+                    4 => {
+                        let unapplied_value  = unapplied_value as u32;
+                        unapplied_value.wrapping_add((base_address + pcrel_offs) as u32).into()
+                    }
+                    _ => todo!("unhandled pointer size: {}", pointer_size)
+                    
+                }
+            }
+            
+            _ => todo!("unhandled application {:?}", application)
+        };
+
+        Ok(applied_value)
+    }
+
     fn parse<Endian: ByteOrder, R: Read + Seek>(
         data: &mut R,
         cie_pointer: u32,
+        cies: &HashMap<u64, Cie>,
+        pointer_size: usize,
+        base_address: u64
     ) -> Result<Fde, EhFrameError> {
-        Ok(Fde {})
+        let offs = data.stream_position()?;
+        assert_ne!(cie_pointer, 0, "cie_pointer should not be equal to 0");
+
+        // - 4 because the stream is currently *after* the cie id, we want directly before
+        let cie = cies
+            .get(&(offs - cie_pointer as u64 - 4))
+            .expect("TODO: properly handle corrupt FDE");
+
+        // PC Begin
+        // An encoded value that indicates the address of the initial location associated with this
+        // FDE. The encoding format is specified in the Augmentation Data.
+        let pc_begin = Self::read_encoded::<Endian, _>(
+            data,
+            cie.fde_pointer_format
+                .expect("no pointer format in the CIE"),
+            cie.fde_pointer_application
+                .expect("no pointer application in the CIE"),
+            pointer_size,
+            base_address
+        )?;
+
+        // PC Range
+        // An absolute value that indicates the number of bytes of instructions associated with
+        // this FDE.
+        let pc_range: u64 = match pointer_size {
+            4 => data.read_u32::<Endian>()?.into(),
+            _ => todo!("unhandled pointer size: {}", pointer_size)
+        };
+
+        Ok(Fde {
+            begin: pc_begin,
+            length: pc_range,
+        })
     }
 }
 
 fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
     data: &mut R,
     pointer_size: usize,
+    cies: &HashMap<u64, Cie>,
+    base_address: u64
 ) -> Result<Option<EhFrameEntry>, EhFrameError> {
+    let entry_offset = data.stream_position()?;
+
     // Length
     // A 4 byte unsigned value indicating the length in bytes of the CIE structure, not
     // including the Length field itself.
@@ -289,13 +369,16 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
     let start_pos = data.stream_position()?;
 
     // CIE ID
-    // A 4 byte unsigned value that is used to distinguish CIE records from FDE records. This value
-    // shall always be 0, which indicates this record is a CIE.
+    // A 4 byte unsigned value that is used to distinguish CIE records from FDE records.
+    // For CIEs, This value shall always be 0, which indicates this record is a CIE.
+    // For FDEs, A 4 byte unsigned value that when subtracted from the offset of the the CIE
+    // Pointer in the current FDE yields the offset of the start of the associated CIE. This value
+    // shall never be 0.
     let cie_id = data.read_u32::<Endian>()?;
 
     let entry = match cie_id {
-        0 => EhFrameEntry::Cie(Cie::parse::<Endian, _>(data, pointer_size)?),
-        _ => EhFrameEntry::Fde(Fde::parse::<Endian, _>(data, cie_id)?),
+        0 => EhFrameEntry::Cie(entry_offset, Cie::parse::<Endian, _>(data, pointer_size)?),
+        _ => EhFrameEntry::Fde(Fde::parse::<Endian, _>(data, cie_id, cies, pointer_size, base_address)?),
     };
 
     let n_bytes_read = data.stream_position()? - start_pos;
@@ -315,15 +398,17 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
 pub fn dump_eh_frame<Endian: ByteOrder, R: Read + Seek>(
     data: &mut R,
     pointer_size: usize,
+    base_address: u64
 ) -> Result<(), EhFrameError> {
-    let cies: HashMap<u64, Cie> = HashMap::new();
+    let mut cies: HashMap<u64, Cie> = HashMap::new();
 
-    while let Some(entry) = parse_eh_frame_entry::<Endian, _>(data, pointer_size)? {
+    while let Some(entry) = parse_eh_frame_entry::<Endian, _>(data, pointer_size, &cies, base_address)? {
         let end_pos = data.stream_position().unwrap();
         match entry {
-            EhFrameEntry::Cie(_) => {
-            },
-            EhFrameEntry::Fde(_) => println!("fde: {:08x}", end_pos),
+            EhFrameEntry::Cie(offset, cie) => {
+                cies.insert(offset, cie);
+            }
+            EhFrameEntry::Fde(fde) => println!("fde: {:08x} {:08x}", fde.begin, fde.length),
         }
     }
 
