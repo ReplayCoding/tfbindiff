@@ -202,6 +202,11 @@ fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize) ->
 fn main() {
     let args: Vec<_> = env::args().collect();
 
+    if args.len() != 3 {
+        println!("Usage: {} <primary> <secondary>", args[0]);
+        return;
+    }
+
     let path = Path::new(args[1].as_str());
     let buffer = fs::read(path).unwrap();
     let object = object::File::parse(&*buffer).unwrap();
