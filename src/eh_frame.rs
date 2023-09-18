@@ -5,7 +5,6 @@ use std::io::ErrorKind;
 use byteorder::ByteOrder;
 use byteorder::ReadBytesExt;
 
-
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Seek;

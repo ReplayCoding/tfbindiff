@@ -131,7 +131,7 @@ impl Program {
 fn dump_code(address: u64, code: &[u8], address_size: usize) -> Vec<iced_x86::Instruction> {
     let mut decoder = iced_x86::Decoder::with_ip(
         (address_size * 8) as u32,
-        &code,
+        code,
         address,
         iced_x86::DecoderOptions::NONE,
     );
