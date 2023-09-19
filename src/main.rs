@@ -229,7 +229,7 @@ fn main() {
         if let Some(func2) = program2.functions.get(name) {
             if compare_functions(func1, func2, program.pointer_size) {
                 println!(
-                    "Function {} changed (len {} -> {}) [addr {:08x} -> {:08x}]",
+                    "\"{}\" changed (len {} -> {}) [addr {:08x} -> {:08x}]",
                     name,
                     func1.content.len(),
                     func2.content.len(),
