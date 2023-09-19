@@ -3,6 +3,7 @@ mod eh_frame;
 use crate::eh_frame::get_fdes;
 use byteorder::LittleEndian;
 
+use memmap2::Mmap;
 use object::{Object, ObjectSection};
 
 use std::collections::BTreeMap;
@@ -208,11 +209,13 @@ fn main() {
     }
 
     let path = Path::new(args[1].as_str());
-    let buffer = fs::read(path).unwrap();
-    let object = object::File::parse(&*buffer).unwrap();
+    let file = fs::File::open(path).unwrap();
+    let buffer = unsafe { Mmap::map(&file).unwrap() };
+    let object = object::File::parse(&buffer[..]).unwrap();
 
     let path2 = Path::new(args[2].as_str());
-    let buffer2 = fs::read(path2).unwrap();
+    let file2 = fs::File::open(path2).unwrap();
+    let buffer2 = unsafe { Mmap::map(&file2).unwrap() };
     let object2 = object::File::parse(&*buffer2).unwrap();
 
     let program = Program::load(&object);
