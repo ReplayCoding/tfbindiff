@@ -236,9 +236,7 @@ fn main() {
                     func1.address,
                     func2.address
                 );
-            } else {
-                // println!("Function {} same", name);
-            };
+            }
         }
     }
 }

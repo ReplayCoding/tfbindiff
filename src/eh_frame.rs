@@ -64,6 +64,8 @@ pub enum EhFrameError {
     PointerFormatDecode(TryFromPrimitiveError<EhPointerFormat>),
     #[error("pointer application decode error: {0}")]
     PointerApplicationDecode(TryFromPrimitiveError<EhPointerApplication>),
+    #[error("invalid CIE {0} for parsing a FDE: {1}")]
+    InvalidCie(u64, &'static str),
 }
 
 impl From<io::Error> for EhFrameError {
@@ -304,13 +306,6 @@ impl Cie {
             }
         }
 
-        // println!("version: {}", version);
-        // println!("augmentation: {}", augmentation_string);
-        // println!("augmentation_size: {:#?}", augmentation_data_length);
-        // println!("eh: {:?}", _eh);
-        // println!("pointer format: {:?}", fde_pointer_format);
-        // println!("pointer application: {:?}", fde_pointer_application);
-
         Ok(Cie {
             fde_pointer_format,
             fde_pointer_application,
@@ -327,22 +322,29 @@ impl Fde {
         base_address: u64,
     ) -> Result<Fde, EhFrameError> {
         let offs = data.stream_position()?;
-        assert_ne!(cie_pointer, 0, "cie_pointer should not be equal to 0");
 
         // - 4 because the stream is currently *after* the cie id, we want directly before
+        let absolute_cie_pointer = offs - cie_pointer as u64 - 4;
         let cie = cies
-            .get(&(offs - cie_pointer as u64 - 4))
-            .expect("TODO: properly handle corrupt FDE");
+            .get(&absolute_cie_pointer)
+            .ok_or(EhFrameError::InvalidCie(
+                absolute_cie_pointer,
+                "no such CIE",
+            ))?;
 
         // PC Begin
         // An encoded value that indicates the address of the initial location associated with this
         // FDE. The encoding format is specified in the Augmentation Data.
         let pc_begin = read_encoded::<Endian, _>(
             data,
-            cie.fde_pointer_format
-                .expect("no pointer format in the CIE"),
-            cie.fde_pointer_application
-                .expect("no pointer application in the CIE"),
+            cie.fde_pointer_format.ok_or(EhFrameError::InvalidCie(
+                absolute_cie_pointer,
+                "no pointer format in the CIE",
+            ))?,
+            cie.fde_pointer_application.ok_or(EhFrameError::InvalidCie(
+                absolute_cie_pointer,
+                "no pointer application in the CIE",
+            ))?,
             pointer_size,
             base_address,
         )?;
