@@ -12,30 +12,6 @@ use std::fs;
 use std::io::Cursor;
 use std::path::Path;
 
-fn hexdump(data: &[u8], chunk_size: usize) {
-    for chunk in data.chunks(chunk_size) {
-        for b in chunk {
-            print!("{:02x} ", b);
-        }
-
-        // padding to align the ascii display
-        for _ in 0..chunk_size - chunk.len() {
-            print!("   ");
-        }
-
-        for b in chunk {
-            let c = *b as char;
-            if c.is_alphanumeric() {
-                print!("{}", c);
-            } else {
-                print!(".");
-            }
-        }
-
-        println!();
-    }
-}
-
 fn demangle_symbol(name: &str) -> Option<String> {
     let sym = cpp_demangle::Symbol::new(name).ok()?;
 
