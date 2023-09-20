@@ -125,15 +125,34 @@ fn dump_code(address: u64, code: &[u8], address_size: usize) -> Vec<iced_x86::In
     instructions
 }
 
-fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize) -> bool {
-    // New bytes, something was added!
-    if func1.content.len() != func2.content.len() {
-        return true;
-    }
+enum CompareResult {
+    Same(),
+    Differs(CompareInfo),
+}
 
+#[derive(Debug)]
+enum DifferenceType {
+    FunctionLength,
+    DifferentInstruction,
+}
+
+struct CompareInfo {
+    first_difference: u64,
+    difference_type: DifferenceType,
+}
+
+fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize) -> CompareResult {
     // If the bytes are the exact same, then there is no difference
     if func1.content == func2.content {
-        return false;
+        return CompareResult::Same();
+    }
+
+    let mut first_difference: u64 = 0;
+    let mut difference_type: Option<DifferenceType> = None;
+
+    // New bytes, something was added!
+    if func1.content.len() != func2.content.len() {
+        difference_type = Some(DifferenceType::FunctionLength);
     }
 
     let code1 = dump_code(func1.address, &func1.content, pointer_size);
@@ -142,17 +161,21 @@ fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize) ->
     let mut info_factory1 = iced_x86::InstructionInfoFactory::new();
     let mut info_factory2 = iced_x86::InstructionInfoFactory::new();
     for (instr1, instr2) in std::iter::zip(code1, code2) {
+        first_difference = instr1.ip() - func1.address;
+
         let op_code1 = instr1.op_code();
         let op_code2 = instr2.op_code();
 
         // Opcode doesn't match
         if instr1.code() != instr2.code() {
-            return true;
+            difference_type = Some(DifferenceType::DifferentInstruction);
+            break;
         }
 
         // Operand count doesn't match
         if op_code1.op_count() != op_code2.op_count() {
-            return true;
+            difference_type = Some(DifferenceType::DifferentInstruction);
+            break;
         }
 
         for i in 0..op_code1.op_count() {
@@ -161,7 +184,8 @@ fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize) ->
 
             // Operand kind doesn't match
             if op_kind1 != op_kind2 {
-                return true;
+                difference_type = Some(DifferenceType::DifferentInstruction);
+                break;
             }
         }
 
@@ -169,11 +193,19 @@ fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize) ->
         let info2 = info_factory2.info(&instr2);
 
         if info1.used_registers() != info2.used_registers() {
-            return true;
+            difference_type = Some(DifferenceType::DifferentInstruction);
+            break;
         }
     }
 
-    false
+    if let Some(difference_type) = difference_type {
+        CompareResult::Differs(CompareInfo {
+            first_difference,
+            difference_type,
+        })
+    } else {
+        CompareResult::Same()
+    }
 }
 
 fn main() {
@@ -203,12 +235,14 @@ fn main() {
 
     for (name, func1) in program.functions.iter() {
         if let Some(func2) = program2.functions.get(name) {
-            if compare_functions(func1, func2, program.pointer_size) {
+            if let CompareResult::Differs(compare_info) =
+                compare_functions(func1, func2, program.pointer_size)
+            {
                 println!(
-                    "\"{}\" changed (len {} -> {}) [addr {:08x} -> {:08x}]",
+                    "\"{}\" changed ({:?}, first change @ {:08x}) [addr {:08x} -> {:08x}]",
                     name,
-                    func1.content.len(),
-                    func2.content.len(),
+                    compare_info.difference_type,
+                    compare_info.first_difference,
                     func1.address,
                     func2.address
                 );
