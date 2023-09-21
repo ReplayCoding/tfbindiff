@@ -127,7 +127,7 @@ fn main() {
                 compare_functions(func1, func2, program.pointer_size)
             {
                 println!(
-                    "\"{}\" changed ({:?}, first change @ {:08x}) [addr {:08x} -> {:08x}]",
+                    "\"{}\" changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
                     name,
                     compare_info.difference_type,
                     compare_info.first_difference,
