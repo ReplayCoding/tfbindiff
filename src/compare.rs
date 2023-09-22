@@ -22,7 +22,7 @@ pub enum DifferenceType {
 
 pub struct CompareInfo {
     pub first_difference: u64,
-    pub difference_type: DifferenceType,
+    pub difference_types: Vec<DifferenceType>,
 }
 
 fn dump_code(address: u64, code: &[u8], address_size: usize) -> Vec<iced_x86::Instruction> {
@@ -52,11 +52,11 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
     }
 
     let mut first_difference: u64 = 0;
-    let mut difference_type: Option<DifferenceType> = None;
+    let mut difference_types: Vec<DifferenceType> = vec![];
 
     // New bytes, something was added!
     if func1.content.len() != func2.content.len() {
-        difference_type = Some(DifferenceType::FunctionLength);
+        difference_types.push(DifferenceType::FunctionLength);
     }
 
     let code1 = dump_code(func1.address, &func1.content, pointer_size);
@@ -72,13 +72,13 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
 
         // Opcode doesn't match
         if instr1.code() != instr2.code() {
-            difference_type = Some(DifferenceType::DifferentInstruction);
+            difference_types.push(DifferenceType::DifferentInstruction);
             break;
         }
 
         // Operand count doesn't match
         if op_code1.op_count() != op_code2.op_count() {
-            difference_type = Some(DifferenceType::DifferentInstruction);
+            difference_types.push(DifferenceType::DifferentInstruction);
             break;
         }
 
@@ -88,7 +88,7 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
 
             // Operand kind doesn't match
             if op_kind1 != op_kind2 {
-                difference_type = Some(DifferenceType::DifferentInstruction);
+                difference_types.push(DifferenceType::DifferentInstruction);
                 break;
             }
         }
@@ -97,15 +97,15 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         let info2 = info_factory2.info(&instr2);
 
         if info1.used_registers() != info2.used_registers() {
-            difference_type = Some(DifferenceType::DifferentInstruction);
+            difference_types.push(DifferenceType::DifferentInstruction);
             break;
         }
     }
 
-    if let Some(difference_type) = difference_type {
+    if !difference_types.is_empty() {
         CompareResult::Differs(CompareInfo {
             first_difference,
-            difference_type,
+            difference_types,
         })
     } else {
         CompareResult::Same()
