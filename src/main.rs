@@ -6,6 +6,7 @@ use crate::eh_frame::get_fdes;
 
 use byteorder::LittleEndian;
 
+use cpp_demangle::DemangleOptions;
 use memmap2::Mmap;
 use object::{Object, ObjectSection};
 
@@ -17,8 +18,9 @@ use std::path::Path;
 
 fn demangle_symbol(name: &str) -> Option<String> {
     let sym = cpp_demangle::Symbol::new(name).ok()?;
+    let options = DemangleOptions::new().no_params();
 
-    sym.demangle(&cpp_demangle::DemangleOptions::new()).ok()
+    sym.demangle(&options).ok()
 }
 
 struct Program {
@@ -127,7 +129,7 @@ fn main() {
                 };
 
                 println!(
-                    "\"{}\" changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
+                    "\x1b[1;36m{}\x1b[0m changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
                     name,
                     compare_info.difference_types,
                     compare_info.first_difference,
