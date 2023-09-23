@@ -69,13 +69,8 @@ impl Program {
         let symbol_map = object.symbol_map();
         for fde in fdes {
             if let Some(symbol) = symbol_map.get(fde.begin) {
-                let mut name: String = symbol.name().to_string();
-                if let Some(demangled_name) = demangle_symbol(&name) {
-                    name = demangled_name
-                };
-
                 functions.insert(
-                    name,
+                    symbol.name().to_string(),
                     Function::new(
                         fde.begin,
                         Self::get_data_at_address(object, fde.begin, fde.length).unwrap(),
@@ -126,6 +121,11 @@ fn main() {
             if let CompareResult::Differs(compare_info) =
                 compare_functions(func1, func2, program.pointer_size)
             {
+                let mut name: String = name.to_string();
+                if let Some(demangled_name) = demangle_symbol(&name) {
+                    name = demangled_name
+                };
+
                 println!(
                     "\"{}\" changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
                     name,
