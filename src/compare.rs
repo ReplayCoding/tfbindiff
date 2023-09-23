@@ -1,4 +1,4 @@
-use iced_x86::{Instruction, Mnemonic, OpKind, Register};
+use iced_x86::{Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register};
 
 pub struct Function {
     pub address: u64,
@@ -36,24 +36,37 @@ fn get_stack_depth_from_instruction(instr: &Instruction) -> i64 {
     }
 }
 
-fn dump_code(address: u64, code: &[u8], address_size: usize) -> Vec<iced_x86::Instruction> {
-    let mut decoder = iced_x86::Decoder::with_ip(
-        (address_size * 8) as u32,
-        code,
-        address,
-        iced_x86::DecoderOptions::NONE,
-    );
+struct InstructionIter<'a> {
+    decoder: Decoder<'a>,
+    instruction: Instruction,
+}
 
-    let mut instr = iced_x86::Instruction::default();
-
-    let mut instructions = vec![];
-
-    while decoder.can_decode() {
-        decoder.decode_out(&mut instr);
-        instructions.push(instr);
+impl<'a> InstructionIter<'a> {
+    fn new(address: u64, code: &'a [u8], address_size: usize) -> Self {
+        Self {
+            decoder: Decoder::with_ip(
+                (address_size * 8) as u32,
+                code,
+                address,
+                DecoderOptions::NONE,
+            ),
+            instruction: Instruction::default(),
+        }
     }
+}
 
-    instructions
+impl<'a> Iterator for InstructionIter<'a> {
+    type Item = Instruction;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.decoder.can_decode() {
+            self.decoder.decode_out(&mut self.instruction);
+
+            Some(self.instruction)
+        } else {
+            None
+        }
+    }
 }
 
 pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize) -> CompareResult {
@@ -71,8 +84,8 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         difference_types.push(DifferenceType::FunctionLength);
     }
 
-    let code1 = dump_code(func1.address, &func1.content, pointer_size);
-    let code2 = dump_code(func2.address, &func2.content, pointer_size);
+    let code1 = InstructionIter::new(func1.address, &func1.content, pointer_size);
+    let code2 = InstructionIter::new(func2.address, &func2.content, pointer_size);
 
     let mut info_factory1 = iced_x86::InstructionInfoFactory::new();
     let mut info_factory2 = iced_x86::InstructionInfoFactory::new();
