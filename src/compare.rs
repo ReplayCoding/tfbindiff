@@ -1,3 +1,5 @@
+use iced_x86::{Instruction, Mnemonic, OpKind, Register};
+
 pub struct Function {
     pub address: u64,
     pub content: Vec<u8>,
@@ -18,11 +20,20 @@ pub enum CompareResult {
 pub enum DifferenceType {
     FunctionLength,
     DifferentInstruction,
+    StackDepth,
 }
 
 pub struct CompareInfo {
     pub first_difference: u64,
     pub difference_types: Vec<DifferenceType>,
+}
+
+fn get_stack_depth_from_instruction(instr: &Instruction) -> i64 {
+    match instr.op1_kind() {
+        OpKind::Immediate8to32 => instr.immediate8to32().into(),
+        OpKind::Immediate32 => instr.immediate32().into(),
+        _ => todo!("stack depth: unhandled op1 type {:?}", instr.op1_kind()),
+    }
 }
 
 fn dump_code(address: u64, code: &[u8], address_size: usize) -> Vec<iced_x86::Instruction> {
@@ -52,6 +63,7 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
     }
 
     let mut first_difference: u64 = 0;
+    let mut has_stack_depth: bool = false;
     let mut difference_types: Vec<DifferenceType> = vec![];
 
     // New bytes, something was added!
@@ -74,6 +86,26 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         if instr1.code() != instr2.code() {
             difference_types.push(DifferenceType::DifferentInstruction);
             break;
+        }
+
+        // Opcode matches, let's check for stack depth
+        // FIXME: Only handles 32-bit register
+        // sub esp, <depth>
+        if instr1.mnemonic() == Mnemonic::Sub
+            && instr1.op0_kind() == OpKind::Register
+            && instr1.op0_register() == Register::ESP
+            && instr2.op0_kind() == OpKind::Register
+            && instr2.op0_register() == Register::ESP
+        {
+            let stack_depth1: i64 = get_stack_depth_from_instruction(&instr1);
+            let stack_depth2: i64 = get_stack_depth_from_instruction(&instr2);
+
+            if !has_stack_depth && stack_depth1 != stack_depth2 {
+                difference_types.push(DifferenceType::StackDepth);
+                // println!("{:08X}: {} {}", func1.address, stack_depth1, stack_depth2);
+            }
+
+            has_stack_depth = true;
         }
 
         // Operand count doesn't match
