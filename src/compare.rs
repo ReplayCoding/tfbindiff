@@ -91,7 +91,8 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         // Opcode matches, let's check for stack depth
         // FIXME: Only handles 32-bit register
         // sub esp, <depth>
-        if instr1.mnemonic() == Mnemonic::Sub
+        if !has_stack_depth
+            && instr1.mnemonic() == Mnemonic::Sub
             && instr1.op0_kind() == OpKind::Register
             && instr1.op0_register() == Register::ESP
             && instr2.op0_kind() == OpKind::Register
@@ -100,7 +101,7 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
             let stack_depth1: i64 = get_stack_depth_from_instruction(&instr1);
             let stack_depth2: i64 = get_stack_depth_from_instruction(&instr2);
 
-            if !has_stack_depth && stack_depth1 != stack_depth2 {
+            if stack_depth1 != stack_depth2 {
                 difference_types.push(DifferenceType::StackDepth);
                 // println!("{:08X}: {} {}", func1.address, stack_depth1, stack_depth2);
             }
