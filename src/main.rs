@@ -128,9 +128,18 @@ fn main() {
                     name = demangled_name
                 };
 
+                if atty::is(atty::Stream::Stdout) {
+                    print!("\x1b[1;36m");
+                }
+
+                print!("{}", name);
+
+                if atty::is(atty::Stream::Stdout) {
+                    print!("\x1b[0m");
+                }
+
                 println!(
-                    "\x1b[1;36m{}\x1b[0m changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
-                    name,
+                    " changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
                     compare_info.difference_types,
                     compare_info.first_difference,
                     func1.address,
