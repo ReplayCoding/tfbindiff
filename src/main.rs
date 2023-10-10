@@ -1,7 +1,7 @@
 mod compare;
 mod eh_frame;
 
-use crate::compare::{compare_functions, CompareResult, Function};
+use crate::compare::{compare_functions, CompareInfo, CompareResult, Function};
 use crate::eh_frame::get_fdes;
 
 use byteorder::LittleEndian;
@@ -10,11 +10,13 @@ use cpp_demangle::DemangleOptions;
 use memmap2::Mmap;
 use object::{Object, ObjectSection};
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io::Cursor;
 use std::path::Path;
+
+use rayon::prelude::*;
 
 fn demangle_symbol(name: &str) -> Option<String> {
     let sym = cpp_demangle::Symbol::new(name).ok()?;
@@ -25,7 +27,7 @@ fn demangle_symbol(name: &str) -> Option<String> {
 
 struct Program {
     pub pointer_size: usize,
-    pub functions: BTreeMap<String, Function>,
+    pub functions: HashMap<String, Function>,
 }
 
 impl Program {
@@ -67,7 +69,7 @@ impl Program {
         )
         .unwrap();
 
-        let mut functions: BTreeMap<String, Function> = BTreeMap::new();
+        let mut functions: HashMap<String, Function> = HashMap::new();
         let symbol_map = object.symbol_map();
         for fde in fdes {
             if let Some(symbol) = symbol_map.get(fde.begin) {
@@ -93,6 +95,15 @@ impl Program {
     }
 }
 
+fn load_file(filename: &str) -> Program {
+    let path = Path::new(filename);
+    let file = fs::File::open(path).unwrap();
+    let buffer = unsafe { Mmap::map(&file).unwrap() };
+    let object = object::File::parse(&*buffer).unwrap();
+
+    Program::load(&object)
+}
+
 fn main() {
     let args: Vec<_> = env::args().collect();
 
@@ -101,51 +112,62 @@ fn main() {
         return;
     }
 
-    let path = Path::new(args[1].as_str());
-    let file = fs::File::open(path).unwrap();
-    let buffer = unsafe { Mmap::map(&file).unwrap() };
-    let object = object::File::parse(&buffer[..]).unwrap();
-
-    let path2 = Path::new(args[2].as_str());
-    let file2 = fs::File::open(path2).unwrap();
-    let buffer2 = unsafe { Mmap::map(&file2).unwrap() };
-    let object2 = object::File::parse(&*buffer2).unwrap();
-
-    let program = Program::load(&object);
-    let program2 = Program::load(&object2);
+    let (program, program2) = rayon::join(|| load_file(&args[1]), || load_file(&args[2]));
 
     if program.pointer_size != program2.pointer_size {
         panic!("pointer sizes don't match");
     }
 
-    for (name, func1) in program.functions.iter() {
-        if let Some(func2) = program2.functions.get(name) {
-            if let CompareResult::Differs(compare_info) =
-                compare_functions(func1, func2, program.pointer_size)
-            {
-                let mut name: String = name.to_string();
-                if let Some(demangled_name) = demangle_symbol(&name) {
-                    name = demangled_name
-                };
+    struct Diff {
+        info: CompareInfo,
+        name: String,
+        address1: u64,
+        address2: u64,
+    }
 
-                if atty::is(atty::Stream::Stdout) {
-                    print!("\x1b[1;36m");
+    let mut diffs: Vec<Diff> = program
+        .functions
+        .par_iter()
+        .filter_map(|(name, func1)| {
+            if let Some(func2) = program2.functions.get(name) {
+                if let CompareResult::Differs(compare_info) =
+                    compare_functions(func1, func2, program.pointer_size)
+                {
+                    let mut name: String = name.to_string();
+                    if let Some(demangled_name) = demangle_symbol(&name) {
+                        name = demangled_name
+                    };
+
+                    Some(Diff {
+                        info: compare_info,
+                        name,
+                        address1: func1.address,
+                        address2: func2.address,
+                    })
+                } else {
+                    None
                 }
-
-                print!("{}", name);
-
-                if atty::is(atty::Stream::Stdout) {
-                    print!("\x1b[0m");
-                }
-
-                println!(
-                    " changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
-                    compare_info.difference_types,
-                    compare_info.first_difference,
-                    func1.address,
-                    func2.address
-                );
+            } else {
+                None
             }
+        })
+        .collect();
+
+    diffs.par_sort_by(|a, b| a.address1.cmp(&b.address1));
+
+    for res in diffs {
+        if atty::is(atty::Stream::Stdout) {
+            print!("\x1b[1;36m");
         }
+
+        print!("{}", res.name);
+
+        if atty::is(atty::Stream::Stdout) {
+            print!("\x1b[0m");
+        }
+        println!(
+            " changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
+            res.info.difference_types, res.info.first_difference, res.address1, res.address2
+        );
     }
 }
