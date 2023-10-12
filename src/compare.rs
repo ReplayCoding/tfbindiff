@@ -87,13 +87,8 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
     let code1 = InstructionIter::new(func1.address, &func1.content, pointer_size);
     let code2 = InstructionIter::new(func2.address, &func2.content, pointer_size);
 
-    let mut info_factory1 = iced_x86::InstructionInfoFactory::new();
-    let mut info_factory2 = iced_x86::InstructionInfoFactory::new();
     for (instr1, instr2) in std::iter::zip(code1, code2) {
         first_difference = instr1.ip() - func1.address;
-
-        let op_code1 = instr1.op_code();
-        let op_code2 = instr2.op_code();
 
         // Opcode doesn't match
         if instr1.code() != instr2.code() {
@@ -116,33 +111,15 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
 
             if stack_depth1 != stack_depth2 {
                 difference_types.push(DifferenceType::StackDepth);
-                // println!("{:08X}: {} {}", func1.address, stack_depth1, stack_depth2);
             }
 
             has_stack_depth = true;
         }
 
-        // Operand count doesn't match
-        if op_code1.op_count() != op_code2.op_count() {
-            difference_types.push(DifferenceType::DifferentInstruction);
-            break;
-        }
+        let op_code1 = instr1.op_code();
+        let op_code2 = instr2.op_code();
 
-        for i in 0..op_code1.op_count() {
-            let op_kind1 = op_code1.op_kind(i);
-            let op_kind2 = op_code2.op_kind(i);
-
-            // Operand kind doesn't match
-            if op_kind1 != op_kind2 {
-                difference_types.push(DifferenceType::DifferentInstruction);
-                break;
-            }
-        }
-
-        let info1 = info_factory1.info(&instr1);
-        let info2 = info_factory2.info(&instr2);
-
-        if info1.used_registers() != info2.used_registers() {
+        if op_code1.op_kinds() != op_code2.op_kinds() {
             difference_types.push(DifferenceType::DifferentInstruction);
             break;
         }
