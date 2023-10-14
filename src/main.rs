@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io::Cursor;
+use std::io::IsTerminal;
 use std::path::Path;
 
 use rayon::prelude::*;
@@ -156,13 +157,13 @@ fn main() {
     diffs.par_sort_by(|a, b| a.address1.cmp(&b.address1));
 
     for res in diffs {
-        if atty::is(atty::Stream::Stdout) {
+        if std::io::stdout().is_terminal() {
             print!("\x1b[1;36m");
         }
 
         print!("{}", res.name);
 
-        if atty::is(atty::Stream::Stdout) {
+        if std::io::stdout().is_terminal() {
             print!("\x1b[0m");
         }
         println!(
