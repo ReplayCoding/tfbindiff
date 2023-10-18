@@ -132,8 +132,6 @@ fn main() {
         address2: u64,
     }
 
-    let mut matches: Vec<(&str, &Function, &Function)> = vec![];
-
     fn build_static_init_map(functions: &HashMap<String, Function>) -> HashMap<String, &String> {
         let mut static_initializers_to_note: HashMap<String, &String> = Default::default();
 
@@ -159,37 +157,46 @@ fn main() {
 
     let static_init_map2 = build_static_init_map(&program2.functions);
 
-    for (name1, func1) in &program1.functions {
+    let matches = program1.functions.par_iter().filter_map(|(name1, func1)| {
         if let Some(func2) = program2.functions.get(name1) {
-            matches.push((name1, func1, func2));
+            Some((name1, func1, func2))
         } else if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name1) {
             let extracted_filename = &captures[1];
             if let Some(name2) = static_init_map2.get(extracted_filename) {
                 if let Some(func2) = program2.functions.get(*name2) {
-                    matches.push((name1, func1, func2));
+                    Some((name1, func1, func2))
+                } else {
+                    None
                 }
+            } else {
+                None
             }
+        } else {
+            None
         }
-    }
+    });
 
-    let mut diffs: Vec<Diff> = vec![];
-    for (name, func1, func2) in matches {
-        if let CompareResult::Differs(compare_info) =
-            compare_functions(func1, func2, program1.pointer_size)
-        {
-            let mut name: String = name.to_string();
-            if let Some(demangled_name) = demangle_symbol(&name) {
-                name = demangled_name
-            };
+    let mut diffs: Vec<Diff> = matches
+        .filter_map(|(name, func1, func2)| {
+            if let CompareResult::Differs(compare_info) =
+                compare_functions(func1, func2, program1.pointer_size)
+            {
+                let mut name: String = name.to_string();
+                if let Some(demangled_name) = demangle_symbol(&name) {
+                    name = demangled_name
+                };
 
-            diffs.push(Diff {
-                info: compare_info,
-                name,
-                address1: func1.address,
-                address2: func2.address,
-            })
-        }
-    }
+                Some(Diff {
+                    info: compare_info,
+                    name,
+                    address1: func1.address,
+                    address2: func2.address,
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
 
     diffs.par_sort_by(|a, b| a.address1.cmp(&b.address1));
 
