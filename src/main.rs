@@ -9,8 +9,10 @@ use byteorder::LittleEndian;
 use cpp_demangle::DemangleOptions;
 use memmap2::Mmap;
 use object::{Object, ObjectSection};
+use once_cell::sync::Lazy;
+use regex::Regex;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::Cursor;
@@ -18,6 +20,10 @@ use std::io::IsTerminal;
 use std::path::Path;
 
 use rayon::prelude::*;
+
+static STATIC_INITIALIZER_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^_?_GLOBAL__sub_I_(.*)\.stdout\.rel_tf_osx_builder\..*\.ii$").unwrap()
+});
 
 fn demangle_symbol(name: &str) -> Option<String> {
     let sym = cpp_demangle::Symbol::new(name).ok()?;
@@ -113,9 +119,9 @@ fn main() {
         return;
     }
 
-    let (program, program2) = rayon::join(|| load_file(&args[1]), || load_file(&args[2]));
+    let (program1, program2) = rayon::join(|| load_file(&args[1]), || load_file(&args[2]));
 
-    if program.pointer_size != program2.pointer_size {
+    if program1.pointer_size != program2.pointer_size {
         panic!("pointer sizes don't match");
     }
 
@@ -126,33 +132,64 @@ fn main() {
         address2: u64,
     }
 
-    let mut diffs: Vec<Diff> = program
-        .functions
-        .par_iter()
-        .filter_map(|(name, func1)| {
-            if let Some(func2) = program2.functions.get(name) {
-                if let CompareResult::Differs(compare_info) =
-                    compare_functions(func1, func2, program.pointer_size)
-                {
-                    let mut name: String = name.to_string();
-                    if let Some(demangled_name) = demangle_symbol(&name) {
-                        name = demangled_name
-                    };
+    let mut matches: Vec<(&str, &Function, &Function)> = vec![];
 
-                    Some(Diff {
-                        info: compare_info,
-                        name,
-                        address1: func1.address,
-                        address2: func2.address,
-                    })
-                } else {
-                    None
+    fn build_static_init_map(functions: &HashMap<String, Function>) -> HashMap<String, &String> {
+        let mut static_initializers_to_note: HashMap<String, &String> = Default::default();
+
+        let mut static_initializer_blocklist: HashSet<String> = Default::default();
+        for (name, _) in functions {
+            if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name) {
+                let extracted_filenae = captures.get(1).unwrap().as_str();
+                if static_initializer_blocklist.contains(extracted_filenae) {
+                    continue;
                 }
-            } else {
-                None
+
+                if !static_initializers_to_note.contains_key(extracted_filenae) {
+                    static_initializers_to_note.insert(extracted_filenae.to_string(), &name);
+                } else {
+                    static_initializers_to_note.remove(extracted_filenae);
+                    static_initializer_blocklist.insert(extracted_filenae.to_string());
+                }
             }
-        })
-        .collect();
+        }
+
+        static_initializers_to_note
+    }
+
+    let static_init_map2 = build_static_init_map(&program2.functions);
+
+    for (name1, func1) in &program1.functions {
+        if let Some(func2) = program2.functions.get(name1) {
+            matches.push((name1, func1, func2));
+        } else if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name1) {
+            let extracted_filename = &captures[1];
+            if let Some(name2) = static_init_map2.get(extracted_filename) {
+                if let Some(func2) = program2.functions.get(*name2) {
+                    matches.push((name1, func1, func2));
+                }
+            }
+        }
+    }
+
+    let mut diffs: Vec<Diff> = vec![];
+    for (name, func1, func2) in matches {
+        if let CompareResult::Differs(compare_info) =
+            compare_functions(func1, func2, program1.pointer_size)
+        {
+            let mut name: String = name.to_string();
+            if let Some(demangled_name) = demangle_symbol(&name) {
+                name = demangled_name
+            };
+
+            diffs.push(Diff {
+                info: compare_info,
+                name,
+                address1: func1.address,
+                address2: func2.address,
+            })
+        }
+    }
 
     diffs.par_sort_by(|a, b| a.address1.cmp(&b.address1));
 
