@@ -10,7 +10,7 @@ use cpp_demangle::DemangleOptions;
 use memmap2::Mmap;
 use object::{Object, ObjectSection};
 use once_cell::sync::Lazy;
-use regex::Regex;
+use regex_lite::Regex;
 
 use std::collections::{HashMap, HashSet};
 use std::env;
