@@ -136,7 +136,7 @@ fn main() {
         let mut static_initializers_to_note: HashMap<String, &String> = Default::default();
 
         let mut static_initializer_blocklist: HashSet<String> = Default::default();
-        for (name, _) in functions {
+        for name in functions.keys() {
             if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name) {
                 let extracted_filenae = captures.get(1).unwrap().as_str();
                 if static_initializer_blocklist.contains(extracted_filenae) {
@@ -144,7 +144,7 @@ fn main() {
                 }
 
                 if !static_initializers_to_note.contains_key(extracted_filenae) {
-                    static_initializers_to_note.insert(extracted_filenae.to_string(), &name);
+                    static_initializers_to_note.insert(extracted_filenae.to_string(), name);
                 } else {
                     static_initializers_to_note.remove(extracted_filenae);
                     static_initializer_blocklist.insert(extracted_filenae.to_string());
@@ -163,11 +163,7 @@ fn main() {
         } else if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name1) {
             let extracted_filename = &captures[1];
             if let Some(name2) = static_init_map2.get(extracted_filename) {
-                if let Some(func2) = program2.functions.get(*name2) {
-                    Some((name1, func1, func2))
-                } else {
-                    None
-                }
+                program2.functions.get(*name2).map(|func2| (name1, func1, func2))
             } else {
                 None
             }
