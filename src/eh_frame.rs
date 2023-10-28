@@ -204,8 +204,11 @@ impl Cie {
         // machine register.
         // NOTE: This field was a pain to figure out, as it doesn't seem to be properly documented.
         // It may be incorrect
-        let _return_address_register = data.read_u8();
+        let _return_address_register = data.read_u8()?;
         // let _return_address_register = leb128::read::unsigned(data);
+        // Check LEB continuation bit, if this isn't zero, see if uncommenting the above line fixes
+        // parsing issues
+        assert_eq!(_return_address_register & (1 << 7), 0);
 
         // Augmentation Length
         // An unsigned LEB128 encoded value indicating the length in bytes of the Augmentation Data. This
