@@ -118,8 +118,7 @@ fn main() {
 
     diffs.par_sort_by(|a, b| a.address1.cmp(&b.address1));
 
-    // This box is dumb, please use references thank you
-    let mut formatter = iced_x86::IntelFormatter::with_options(Some(Box::new(program1)), None);
+    let mut formatter = iced_x86::IntelFormatter::new();
     let mut formatted_instruction = String::new();
 
     for res in diffs {

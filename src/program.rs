@@ -1,4 +1,3 @@
-use crate::demangle_symbol;
 use crate::eh_frame::get_fdes;
 use byteorder::LittleEndian;
 use object::{Object, ObjectSection};
@@ -23,7 +22,6 @@ impl Function {
 pub struct Program {
     pub pointer_size: usize,
     pub functions: HashMap<String, Function>,
-    symbol_map: HashMap<u64, String>,
 }
 
 impl Program {
@@ -74,15 +72,12 @@ impl Program {
         .unwrap();
 
         let mut functions: HashMap<String, Function> = HashMap::new();
-        let mut symbol_map = HashMap::new();
-        for symbol in object.symbol_map().symbols() {
-            symbol_map.insert(symbol.address(), symbol.name().to_string());
-        }
+        let symbol_map = object.symbol_map();
 
         for fde in fdes {
-            if let Some(symbol) = symbol_map.get(&fde.begin) {
+            if let Some(symbol) = symbol_map.get(fde.begin) {
                 functions.insert(
-                    symbol.to_string(),
+                    symbol.name().to_string(),
                     Function::new(
                         fde.begin,
                         Self::get_data_at_address(object, fde.begin, fde.length).unwrap(),
@@ -99,27 +94,6 @@ impl Program {
         Program {
             pointer_size,
             functions,
-            symbol_map,
-        }
-    }
-}
-
-impl iced_x86::SymbolResolver for Program {
-    fn symbol(
-        &mut self,
-        _instruction: &iced_x86::Instruction,
-        _operand: u32,
-        _instruction_operand: Option<u32>,
-        address: u64,
-        _address_size: u32,
-    ) -> Option<iced_x86::SymbolResult<'_>> {
-        if let Some(name) = self.symbol_map.get(&address) {
-            let name = demangle_symbol(name)
-                .or_else(|| Some(name.to_string()))
-                .unwrap();
-            Some(iced_x86::SymbolResult::with_string(address, name))
-        } else {
-            None
         }
     }
 }
