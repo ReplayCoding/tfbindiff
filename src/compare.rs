@@ -1,17 +1,6 @@
-use std::{hash::Hash};
-
+use crate::Function;
 use iced_x86::{Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register};
-
-pub struct Function {
-    pub address: u64,
-    pub content: Vec<u8>,
-}
-
-impl Function {
-    pub fn new(address: u64, content: Vec<u8>) -> Function {
-        Function { address, content }
-    }
-}
+use std::hash::Hash;
 
 pub enum CompareResult {
     Same(),
