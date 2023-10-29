@@ -7,6 +7,7 @@ use crate::eh_frame::get_fdes;
 use byteorder::LittleEndian;
 
 use cpp_demangle::DemangleOptions;
+use iced_x86::Formatter;
 use memmap2::Mmap;
 use object::{Object, ObjectSection};
 use once_cell::sync::Lazy;
@@ -35,6 +36,7 @@ fn demangle_symbol(name: &str) -> Option<String> {
 struct Program {
     pub pointer_size: usize,
     pub functions: HashMap<String, Function>,
+    pub symbol_map: HashMap<u64, String>,
 }
 
 impl Program {
@@ -77,11 +79,15 @@ impl Program {
         .unwrap();
 
         let mut functions: HashMap<String, Function> = HashMap::new();
-        let symbol_map = object.symbol_map();
+        let mut symbol_map = HashMap::new();
+        for symbol in object.symbol_map().symbols() {
+            symbol_map.insert(symbol.address(), symbol.name().to_string());
+        }
+
         for fde in fdes {
-            if let Some(symbol) = symbol_map.get(fde.begin) {
+            if let Some(symbol) = symbol_map.get(&fde.begin) {
                 functions.insert(
-                    symbol.name().to_string(),
+                    symbol.to_string(),
                     Function::new(
                         fde.begin,
                         Self::get_data_at_address(object, fde.begin, fde.length).unwrap(),
@@ -98,6 +104,27 @@ impl Program {
         Program {
             pointer_size,
             functions,
+            symbol_map,
+        }
+    }
+}
+
+impl iced_x86::SymbolResolver for Program {
+    fn symbol(
+        &mut self,
+        _instruction: &iced_x86::Instruction,
+        _operand: u32,
+        _instruction_operand: Option<u32>,
+        address: u64,
+        _address_size: u32,
+    ) -> Option<iced_x86::SymbolResult<'_>> {
+        if let Some(name) = self.symbol_map.get(&address) {
+            let name = demangle_symbol(name)
+                .or_else(|| Some(name.to_string()))
+                .unwrap();
+            Some(iced_x86::SymbolResult::with_string(address, name))
+        } else {
+            None
         }
     }
 }
@@ -199,6 +226,9 @@ fn main() {
 
     diffs.par_sort_by(|a, b| a.address1.cmp(&b.address1));
 
+    let mut formatter = iced_x86::IntelFormatter::with_options(Some(Box::new(program1)), None);
+    let mut formatted_instruction = String::new();
+
     for res in diffs {
         println!(
             "{} changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
@@ -212,7 +242,10 @@ fn main() {
 
         for op in res.info.diffops {
             for change in op.iter_changes(&res.info.instructions.0, &res.info.instructions.1) {
-                let text = format!("\t{} {}", change.tag(), change.value_ref());
+                formatted_instruction.clear();
+                formatter.format(change.value_ref().get(), &mut formatted_instruction);
+
+                let text = format!("\t{} {}", change.tag(), formatted_instruction);
                 match change.tag() {
                     similar::ChangeTag::Equal => println!("{}", text.on_default_color()),
                     similar::ChangeTag::Insert => println!("{}", text.green()),

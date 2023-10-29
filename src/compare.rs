@@ -1,4 +1,4 @@
-use std::{fmt::Display, hash::Hash};
+use std::{hash::Hash};
 
 use iced_x86::{Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register};
 
@@ -42,10 +42,9 @@ fn get_stack_depth_from_instruction(instr: &Instruction) -> i64 {
 
 #[derive(Clone, Copy)]
 pub struct InstructionWrapper(Instruction);
-
-impl Display for InstructionWrapper {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+impl InstructionWrapper {
+    pub fn get(&self) -> &Instruction {
+        &self.0
     }
 }
 
@@ -127,7 +126,7 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         InstructionIter::new(func2.address, &func2.content, pointer_size).collect();
 
     for (instr1, instr2) in std::iter::zip(&instructions1, &instructions2) {
-        first_difference = instr1.0.ip() - func1.address;
+        first_difference = instr1.get().ip() - func1.address;
 
         if instr1 != instr2 {
             difference_types.push(DifferenceType::DifferentInstruction);
@@ -138,14 +137,14 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         // FIXME: Only handles 32-bit register
         // sub esp, <depth>
         if !has_stack_depth
-            && instr1.0.mnemonic() == Mnemonic::Sub
-            && instr1.0.op0_kind() == OpKind::Register
-            && instr1.0.op0_register() == Register::ESP
-            && instr2.0.op0_kind() == OpKind::Register
-            && instr2.0.op0_register() == Register::ESP
+            && instr1.get().mnemonic() == Mnemonic::Sub
+            && instr1.get().op0_kind() == OpKind::Register
+            && instr1.get().op0_register() == Register::ESP
+            && instr2.get().op0_kind() == OpKind::Register
+            && instr2.get().op0_register() == Register::ESP
         {
-            let stack_depth1: i64 = get_stack_depth_from_instruction(&instr1.0);
-            let stack_depth2: i64 = get_stack_depth_from_instruction(&instr2.0);
+            let stack_depth1: i64 = get_stack_depth_from_instruction(&instr1.get());
+            let stack_depth2: i64 = get_stack_depth_from_instruction(&instr2.get());
 
             if stack_depth1 != stack_depth2 {
                 difference_types.push(DifferenceType::StackDepth);
