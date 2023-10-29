@@ -246,11 +246,16 @@ fn main() {
                 formatter.format(change.value_ref().get(), &mut formatted_instruction);
 
                 let text = format!("\t{} {}", change.tag(), formatted_instruction);
-                match change.tag() {
-                    similar::ChangeTag::Equal => println!("{}", text.on_default_color()),
-                    similar::ChangeTag::Insert => println!("{}", text.green()),
-                    similar::ChangeTag::Delete => println!("{}", text.red()),
-                }
+                println!(
+                    "{}",
+                    text.if_supports_color(owo_colors::Stream::Stdout, |text| {
+                        match change.tag() {
+                            similar::ChangeTag::Equal => text.on_default_color().to_string(),
+                            similar::ChangeTag::Insert => text.green().to_string(),
+                            similar::ChangeTag::Delete => text.red().to_string(),
+                        }
+                    })
+                );
             }
         }
     }
