@@ -1,3 +1,5 @@
+use std::{fmt::Display, hash::Hash};
+
 use iced_x86::{Decoder, DecoderOptions, Instruction, Mnemonic, OpKind, Register};
 
 pub struct Function {
@@ -26,6 +28,8 @@ pub enum DifferenceType {
 pub struct CompareInfo {
     pub first_difference: u64,
     pub difference_types: Vec<DifferenceType>,
+    pub diffops: Vec<similar::DiffOp>,
+    pub instructions: (Vec<InstructionWrapper>, Vec<InstructionWrapper>),
 }
 
 fn get_stack_depth_from_instruction(instr: &Instruction) -> i64 {
@@ -36,9 +40,45 @@ fn get_stack_depth_from_instruction(instr: &Instruction) -> i64 {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct InstructionWrapper(Instruction);
+
+impl Display for InstructionWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Eq for InstructionWrapper {}
+impl PartialEq for InstructionWrapper {
+    fn eq(&self, other: &Self) -> bool {
+        (self.0.code() == other.0.code())
+            && (self.0.op_code().op_kinds() == other.0.op_code().op_kinds())
+    }
+}
+
+impl Hash for InstructionWrapper {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.code().hash(state);
+        self.0.op_code().op_kinds().hash(state);
+    }
+}
+
+impl Ord for InstructionWrapper {
+    fn cmp(&self, _other: &Self) -> std::cmp::Ordering {
+        // For some reason this is required to diff, but not used??
+        todo!("implement Ord for instructions")
+    }
+}
+
+impl PartialOrd for InstructionWrapper {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 struct InstructionIter<'a> {
     decoder: Decoder<'a>,
-    instruction: Instruction,
 }
 
 impl<'a> InstructionIter<'a> {
@@ -50,19 +90,16 @@ impl<'a> InstructionIter<'a> {
                 address,
                 DecoderOptions::NONE,
             ),
-            instruction: Instruction::default(),
         }
     }
 }
 
 impl<'a> Iterator for InstructionIter<'a> {
-    type Item = Instruction;
+    type Item = InstructionWrapper;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.decoder.can_decode() {
-            self.decoder.decode_out(&mut self.instruction);
-
-            Some(self.instruction)
+            Some(InstructionWrapper(self.decoder.decode()))
         } else {
             None
         }
@@ -84,14 +121,15 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         difference_types.push(DifferenceType::FunctionLength);
     }
 
-    let code1 = InstructionIter::new(func1.address, &func1.content, pointer_size);
-    let code2 = InstructionIter::new(func2.address, &func2.content, pointer_size);
+    let instructions1: Vec<InstructionWrapper> =
+        InstructionIter::new(func1.address, &func1.content, pointer_size).collect();
+    let instructions2: Vec<InstructionWrapper> =
+        InstructionIter::new(func2.address, &func2.content, pointer_size).collect();
 
-    for (instr1, instr2) in std::iter::zip(code1, code2) {
-        first_difference = instr1.ip() - func1.address;
+    for (instr1, instr2) in std::iter::zip(&instructions1, &instructions2) {
+        first_difference = instr1.0.ip() - func1.address;
 
-        // Opcode doesn't match
-        if instr1.code() != instr2.code() {
+        if instr1 != instr2 {
             difference_types.push(DifferenceType::DifferentInstruction);
             break;
         }
@@ -100,14 +138,14 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         // FIXME: Only handles 32-bit register
         // sub esp, <depth>
         if !has_stack_depth
-            && instr1.mnemonic() == Mnemonic::Sub
-            && instr1.op0_kind() == OpKind::Register
-            && instr1.op0_register() == Register::ESP
-            && instr2.op0_kind() == OpKind::Register
-            && instr2.op0_register() == Register::ESP
+            && instr1.0.mnemonic() == Mnemonic::Sub
+            && instr1.0.op0_kind() == OpKind::Register
+            && instr1.0.op0_register() == Register::ESP
+            && instr2.0.op0_kind() == OpKind::Register
+            && instr2.0.op0_register() == Register::ESP
         {
-            let stack_depth1: i64 = get_stack_depth_from_instruction(&instr1);
-            let stack_depth2: i64 = get_stack_depth_from_instruction(&instr2);
+            let stack_depth1: i64 = get_stack_depth_from_instruction(&instr1.0);
+            let stack_depth2: i64 = get_stack_depth_from_instruction(&instr2.0);
 
             if stack_depth1 != stack_depth2 {
                 difference_types.push(DifferenceType::StackDepth);
@@ -115,20 +153,18 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
 
             has_stack_depth = true;
         }
-
-        let op_code1 = instr1.op_code();
-        let op_code2 = instr2.op_code();
-
-        if op_code1.op_kinds() != op_code2.op_kinds() {
-            difference_types.push(DifferenceType::DifferentInstruction);
-            break;
-        }
     }
 
     if !difference_types.is_empty() {
+        // NOTE: Lcs panics on oob, wtf?
+        let diffops =
+            similar::capture_diff_slices(similar::Algorithm::Myers, &instructions1, &instructions2);
+
         CompareResult::Differs(CompareInfo {
             first_difference,
             difference_types,
+            diffops,
+            instructions: (instructions1, instructions2),
         })
     } else {
         CompareResult::Same()

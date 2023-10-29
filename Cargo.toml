@@ -18,3 +18,5 @@ memmap2 = "0.7.1"
 rayon = "1.8.0"
 regex-lite = "0.1.5"
 once_cell = "1.18.0"
+owo-colors = { version = "3.5.0", features = ["supports-colors"] }
+similar = "2.3.0"

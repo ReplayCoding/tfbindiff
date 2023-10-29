@@ -10,13 +10,13 @@ use cpp_demangle::DemangleOptions;
 use memmap2::Mmap;
 use object::{Object, ObjectSection};
 use once_cell::sync::Lazy;
+use owo_colors::OwoColorize;
 use regex_lite::Regex;
 
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::Cursor;
-use std::io::IsTerminal;
 use std::path::Path;
 
 use rayon::prelude::*;
@@ -163,7 +163,10 @@ fn main() {
         } else if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name1) {
             let extracted_filename = &captures[1];
             if let Some(name2) = static_init_map2.get(extracted_filename) {
-                program2.functions.get(*name2).map(|func2| (name1, func1, func2))
+                program2
+                    .functions
+                    .get(*name2)
+                    .map(|func2| (name1, func1, func2))
             } else {
                 None
             }
@@ -197,18 +200,25 @@ fn main() {
     diffs.par_sort_by(|a, b| a.address1.cmp(&b.address1));
 
     for res in diffs {
-        if std::io::stdout().is_terminal() {
-            print!("\x1b[1;36m");
-        }
-
-        print!("{}", res.name);
-
-        if std::io::stdout().is_terminal() {
-            print!("\x1b[0m");
-        }
         println!(
-            " changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
-            res.info.difference_types, res.info.first_difference, res.address1, res.address2
+            "{} changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
+            res.name
+                .if_supports_color(owo_colors::Stream::Stdout, |n| n.cyan()),
+            res.info.difference_types,
+            res.info.first_difference,
+            res.address1,
+            res.address2
         );
+
+        for op in res.info.diffops {
+            for change in op.iter_changes(&res.info.instructions.0, &res.info.instructions.1) {
+                let text = format!("\t{} {}", change.tag(), change.value_ref());
+                match change.tag() {
+                    similar::ChangeTag::Equal => println!("{}", text.on_default_color()),
+                    similar::ChangeTag::Insert => println!("{}", text.green()),
+                    similar::ChangeTag::Delete => println!("{}", text.red()),
+                }
+            }
+        }
     }
 }
