@@ -19,6 +19,29 @@ static STATIC_INITIALIZER_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^_?_GLOBAL__sub_I_(.*)\.stdout\.rel_tf_osx_builder\..*\.ii$").unwrap()
 });
 
+fn build_static_init_map(functions: &HashMap<String, Function>) -> HashMap<String, &String> {
+    let mut static_initializers_to_note: HashMap<String, &String> = Default::default();
+
+    let mut static_initializer_blocklist: HashSet<String> = Default::default();
+    for name in functions.keys() {
+        if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name) {
+            let extracted_filenae = captures.get(1).unwrap().as_str();
+            if static_initializer_blocklist.contains(extracted_filenae) {
+                continue;
+            }
+
+            if !static_initializers_to_note.contains_key(extracted_filenae) {
+                static_initializers_to_note.insert(extracted_filenae.to_string(), name);
+            } else {
+                static_initializers_to_note.remove(extracted_filenae);
+                static_initializer_blocklist.insert(extracted_filenae.to_string());
+            }
+        }
+    }
+
+    static_initializers_to_note
+}
+
 fn demangle_symbol(name: &str) -> Option<String> {
     let sym = cpp_demangle::Symbol::new(name).ok()?;
     let options = DemangleOptions::new().no_params();
@@ -48,29 +71,6 @@ fn main() {
         name: String,
         address1: u64,
         address2: u64,
-    }
-
-    fn build_static_init_map(functions: &HashMap<String, Function>) -> HashMap<String, &String> {
-        let mut static_initializers_to_note: HashMap<String, &String> = Default::default();
-
-        let mut static_initializer_blocklist: HashSet<String> = Default::default();
-        for name in functions.keys() {
-            if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name) {
-                let extracted_filenae = captures.get(1).unwrap().as_str();
-                if static_initializer_blocklist.contains(extracted_filenae) {
-                    continue;
-                }
-
-                if !static_initializers_to_note.contains_key(extracted_filenae) {
-                    static_initializers_to_note.insert(extracted_filenae.to_string(), name);
-                } else {
-                    static_initializers_to_note.remove(extracted_filenae);
-                    static_initializer_blocklist.insert(extracted_filenae.to_string());
-                }
-            }
-        }
-
-        static_initializers_to_note
     }
 
     let static_init_map2 = build_static_init_map(&program2.functions);
