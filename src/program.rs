@@ -1,5 +1,8 @@
+use crate::compare::InstructionWrapper;
+use crate::demangle_symbol;
 use crate::eh_frame::get_fdes;
 use byteorder::LittleEndian;
+use iced_x86::Formatter;
 use object::{Object, ObjectSection};
 
 use memmap2::Mmap;
@@ -22,6 +25,7 @@ impl Function {
 pub struct Program {
     pub pointer_size: usize,
     pub functions: HashMap<String, Function>,
+    symbol_map: HashMap<u64, String>,
 }
 
 impl Program {
@@ -72,12 +76,17 @@ impl Program {
         .unwrap();
 
         let mut functions: HashMap<String, Function> = HashMap::new();
-        let symbol_map = object.symbol_map();
+        let symbol_map: HashMap<u64, String> = object
+            .symbol_map()
+            .symbols()
+            .iter()
+            .map(|s| (s.address(), s.name().to_string()))
+            .collect();
 
         for fde in fdes {
-            if let Some(symbol) = symbol_map.get(fde.begin) {
+            if let Some(name) = symbol_map.get(&fde.begin) {
                 functions.insert(
-                    symbol.name().to_string(),
+                    name.to_string(),
                     Function::new(
                         fde.begin,
                         Self::get_data_at_address(object, fde.begin, fde.length).unwrap(),
@@ -94,6 +103,49 @@ impl Program {
         Program {
             pointer_size,
             functions,
+            symbol_map,
         }
+    }
+}
+
+impl iced_x86::SymbolResolver for Program {
+    fn symbol(
+        &mut self,
+        _instruction: &iced_x86::Instruction,
+        _operand: u32,
+        _instruction_operand: Option<u32>,
+        address: u64,
+        _address_size: u32,
+    ) -> Option<iced_x86::SymbolResult<'_>> {
+        let mangled_name = self.symbol_map.get(&address)?;
+        let name = demangle_symbol(mangled_name).unwrap_or(mangled_name.clone());
+
+        Some(iced_x86::SymbolResult::with_string(address, name))
+    }
+}
+
+pub struct ProgramInstructionFormatter {
+    formatter: iced_x86::IntelFormatter,
+}
+
+impl ProgramInstructionFormatter {
+    pub fn new(program: Box<Program>) -> Self {
+        Self {
+            formatter: iced_x86::IntelFormatter::with_options(Some(program), None),
+        }
+    }
+
+    pub fn format(&mut self, instructions: &[InstructionWrapper]) -> Vec<String> {
+        let mut formatted_instructions = vec![];
+        formatted_instructions.reserve(instructions.len());
+
+        for instruction in instructions {
+            let mut out = String::new();
+            self.formatter.format(instruction.get(), &mut out);
+
+            formatted_instructions.push(out);
+        }
+
+        formatted_instructions
     }
 }

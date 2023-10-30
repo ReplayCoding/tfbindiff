@@ -3,10 +3,9 @@ mod eh_frame;
 mod program;
 
 use crate::compare::{compare_functions, CompareInfo, CompareResult};
-use crate::program::{Function, Program};
+use crate::program::{Function, Program, ProgramInstructionFormatter};
 
 use cpp_demangle::DemangleOptions;
-use iced_x86::Formatter;
 use once_cell::sync::Lazy;
 use owo_colors::OwoColorize;
 use regex_lite::Regex;
@@ -20,7 +19,7 @@ static STATIC_INITIALIZER_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^_?_GLOBAL__sub_I_(.*)\.stdout\.rel_tf_osx_builder\..*\.ii$").unwrap()
 });
 
-pub(crate) fn demangle_symbol(name: &str) -> Option<String> {
+fn demangle_symbol(name: &str) -> Option<String> {
     let sym = cpp_demangle::Symbol::new(name).ok()?;
     let options = DemangleOptions::new().no_params();
 
@@ -36,15 +35,15 @@ fn main() {
     }
 
     let (program1, program2) = rayon::join(
-        || Program::load_path(&args[1]),
-        || Program::load_path(&args[2]),
+        || Box::new(Program::load_path(&args[1])),
+        || Box::new(Program::load_path(&args[2])),
     );
 
     if program1.pointer_size != program2.pointer_size {
         panic!("pointer sizes don't match");
     }
 
-    struct Diff {
+    struct FunctionChange {
         info: CompareInfo,
         name: String,
         address1: u64,
@@ -94,7 +93,7 @@ fn main() {
         }
     });
 
-    let mut diffs: Vec<Diff> = matches
+    let mut changes: Vec<FunctionChange> = matches
         .filter_map(|(name, func1, func2)| {
             if let CompareResult::Differs(compare_info) =
                 compare_functions(func1, func2, program1.pointer_size)
@@ -104,7 +103,7 @@ fn main() {
                     name = demangled_name
                 };
 
-                Some(Diff {
+                Some(FunctionChange {
                     info: compare_info,
                     name,
                     address1: func1.address,
@@ -116,12 +115,12 @@ fn main() {
         })
         .collect();
 
-    diffs.par_sort_by(|a, b| a.address1.cmp(&b.address1));
+    changes.par_sort_by(|a, b| a.address1.cmp(&b.address1));
 
-    let mut formatter = iced_x86::IntelFormatter::new();
-    let mut formatted_instruction = String::new();
+    let mut formatter1 = ProgramInstructionFormatter::new(program1);
+    let mut formatter2 = ProgramInstructionFormatter::new(program2);
 
-    for res in diffs {
+    for res in changes {
         println!(
             "{} changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
             res.name
@@ -132,23 +131,58 @@ fn main() {
             res.address2
         );
 
+        let (instructions1, instructions2) = &res.info.instructions;
         for op in res.info.diffops {
-            for change in op.iter_changes(&res.info.instructions.0, &res.info.instructions.1) {
-                formatted_instruction.clear();
-                formatter.format(change.value_ref().get(), &mut formatted_instruction);
+            match op {
+                similar::DiffOp::Equal {
+                    old_index: _,
+                    new_index: _,
+                    len: _,
+                } => continue,
+                similar::DiffOp::Delete {
+                    old_index,
+                    old_len,
+                    new_index,
+                } => {
+                    println!("deleted old {:08X} new {:08X}", old_index, new_index);
 
-                let text = format!("\t{} {}", change.tag(), formatted_instruction);
-                println!(
-                    "{}",
-                    text.if_supports_color(owo_colors::Stream::Stdout, |text| {
-                        match change.tag() {
-                            similar::ChangeTag::Equal => text.on_default_color().to_string(),
-                            similar::ChangeTag::Insert => text.green().to_string(),
-                            similar::ChangeTag::Delete => text.red().to_string(),
-                        }
-                    })
-                );
+                    for i in formatter1.format(&instructions1[old_index..old_index + old_len]) {
+                        println!("\t- {}", i);
+                    }
+                }
+                similar::DiffOp::Insert {
+                    old_index,
+                    new_index,
+                    new_len,
+                } => {
+                    println!("inserted new {:08X} old {:08X}", new_index, old_index);
+
+                    for i in formatter2.format(&instructions2[new_index..new_index + new_len]) {
+                        println!("\t+ {}", i);
+                    }
+                }
+                similar::DiffOp::Replace {
+                    old_index,
+                    old_len,
+                    new_index,
+                    new_len,
+                } => {
+                    println!(
+                        "replace old {:08X} len {:08X} new {:08X} len {:08X}",
+                        new_index, new_len, old_index, old_len
+                    );
+
+                    for i in formatter1.format(&instructions1[old_index..old_index + old_len]) {
+                        println!("\t- {}", i);
+                    }
+
+                    for i in formatter2.format(&instructions2[new_index..new_index + new_len]) {
+                        println!("\t+ {}", i);
+                    }
+                }
             }
+
+            println!();
         }
     }
 }
