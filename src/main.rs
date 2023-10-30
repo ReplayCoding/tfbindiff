@@ -49,74 +49,14 @@ fn demangle_symbol(name: &str) -> Option<String> {
     sym.demangle(&options).ok()
 }
 
-fn main() {
-    let args: Vec<_> = env::args().collect();
+struct FunctionChange {
+    info: CompareInfo,
+    name: String,
+    address1: u64,
+    address2: u64,
+}
 
-    if args.len() != 3 {
-        println!("Usage: {} <primary> <secondary>", args[0]);
-        return;
-    }
-
-    let (program1, program2) = rayon::join(
-        || Box::new(Program::load_path(&args[1])),
-        || Box::new(Program::load_path(&args[2])),
-    );
-
-    if program1.pointer_size != program2.pointer_size {
-        panic!("pointer sizes don't match");
-    }
-
-    struct FunctionChange {
-        info: CompareInfo,
-        name: String,
-        address1: u64,
-        address2: u64,
-    }
-
-    let static_init_map2 = build_static_init_map(&program2.functions);
-
-    let matches = program1.functions.par_iter().filter_map(|(name1, func1)| {
-        if let Some(func2) = program2.functions.get(name1) {
-            Some((name1, func1, func2))
-        } else if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name1) {
-            let extracted_filename = &captures[1];
-            if let Some(name2) = static_init_map2.get(extracted_filename) {
-                program2
-                    .functions
-                    .get(*name2)
-                    .map(|func2| (name1, func1, func2))
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    });
-
-    let mut changes: Vec<FunctionChange> = matches
-        .filter_map(|(name, func1, func2)| {
-            if let CompareResult::Differs(compare_info) =
-                compare_functions(func1, func2, program1.pointer_size)
-            {
-                let mut name: String = name.to_string();
-                if let Some(demangled_name) = demangle_symbol(&name) {
-                    name = demangled_name
-                };
-
-                Some(FunctionChange {
-                    info: compare_info,
-                    name,
-                    address1: func1.address,
-                    address2: func2.address,
-                })
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    changes.par_sort_by(|a, b| a.address1.cmp(&b.address1));
-
+fn print_changes(program1: Box<Program>, program2: Box<Program>, changes: &[FunctionChange]) {
     let mut formatter1 = ProgramInstructionFormatter::new(program1);
     let mut formatter2 = ProgramInstructionFormatter::new(program2);
 
@@ -132,8 +72,8 @@ fn main() {
         );
 
         let (instructions1, instructions2) = &res.info.instructions;
-        for op in res.info.diffops {
-            match op {
+        for op in &res.info.diffops {
+            match *op {
                 similar::DiffOp::Equal {
                     old_index: _,
                     new_index: _,
@@ -185,4 +125,68 @@ fn main() {
             println!();
         }
     }
+}
+
+fn main() {
+    let args: Vec<_> = env::args().collect();
+
+    if args.len() != 3 {
+        println!("Usage: {} <primary> <secondary>", args[0]);
+        return;
+    }
+
+    let (program1, program2) = rayon::join(
+        || Box::new(Program::load_path(&args[1])),
+        || Box::new(Program::load_path(&args[2])),
+    );
+
+    if program1.pointer_size != program2.pointer_size {
+        panic!("pointer sizes don't match");
+    }
+
+    let static_init_map2 = build_static_init_map(&program2.functions);
+
+    let matches = program1.functions.par_iter().filter_map(|(name1, func1)| {
+        if let Some(func2) = program2.functions.get(name1) {
+            Some((name1, func1, func2))
+        } else if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name1) {
+            let extracted_filename = &captures[1];
+            if let Some(name2) = static_init_map2.get(extracted_filename) {
+                program2
+                    .functions
+                    .get(*name2)
+                    .map(|func2| (name1, func1, func2))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    });
+
+    let mut changes: Vec<FunctionChange> = matches
+        .filter_map(|(name, func1, func2)| {
+            if let CompareResult::Differs(compare_info) =
+                compare_functions(func1, func2, program1.pointer_size)
+            {
+                let mut name: String = name.to_string();
+                if let Some(demangled_name) = demangle_symbol(&name) {
+                    name = demangled_name
+                };
+
+                Some(FunctionChange {
+                    info: compare_info,
+                    name,
+                    address1: func1.address,
+                    address2: func2.address,
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    changes.par_sort_by(|a, b| a.address1.cmp(&b.address1));
+
+    print_changes(program1, program2, &changes);
 }
