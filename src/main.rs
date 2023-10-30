@@ -151,14 +151,12 @@ fn main() {
             Some((name1, func1, func2))
         } else if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name1) {
             let extracted_filename = &captures[1];
-            if let Some(name2) = static_init_map2.get(extracted_filename) {
-                program2
-                    .functions
-                    .get(*name2)
-                    .map(|func2| (name1, func1, func2))
-            } else {
-                None
-            }
+            let name2 = static_init_map2.get(extracted_filename)?;
+
+            program2
+                .functions
+                .get(*name2)
+                .map(|func2| (name1, func1, func2))
         } else {
             None
         }
@@ -166,22 +164,18 @@ fn main() {
 
     let mut changes: Vec<FunctionChange> = matches
         .filter_map(|(name, func1, func2)| {
-            if let CompareResult::Differs(compare_info) =
-                compare_functions(func1, func2, program1.pointer_size)
-            {
-                let mut name: String = name.to_string();
-                if let Some(demangled_name) = demangle_symbol(&name) {
-                    name = demangled_name
-                };
+            match compare_functions(func1, func2, program1.pointer_size) {
+                CompareResult::Differs(compare_info) => {
+                    let name: String = demangle_symbol(&name).unwrap_or(name.to_string());
 
-                Some(FunctionChange {
-                    info: compare_info,
-                    name,
-                    address1: func1.address,
-                    address2: func2.address,
-                })
-            } else {
-                None
+                    Some(FunctionChange {
+                        info: compare_info,
+                        name,
+                        address1: func1.address,
+                        address2: func2.address,
+                    })
+                }
+                CompareResult::Same() => None,
             }
         })
         .collect();
