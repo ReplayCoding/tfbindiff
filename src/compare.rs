@@ -132,8 +132,8 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
             && instr2.get().op0_kind() == OpKind::Register
             && instr2.get().op0_register() == Register::ESP
         {
-            let stack_depth1: i64 = get_stack_depth_from_instruction(&instr1.get());
-            let stack_depth2: i64 = get_stack_depth_from_instruction(&instr2.get());
+            let stack_depth1: i64 = get_stack_depth_from_instruction(instr1.get());
+            let stack_depth2: i64 = get_stack_depth_from_instruction(instr2.get());
 
             if stack_depth1 != stack_depth2 {
                 difference_types.push(DifferenceType::StackDepth);
