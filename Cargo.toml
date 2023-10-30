@@ -22,5 +22,3 @@ rayon = "1.8.0"
 regex-lite = "0.1.5"
 
 similar = "2.3.0"
-
-owo-colors = { version = "3.5.0", features = ["supports-colors"] }

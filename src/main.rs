@@ -7,11 +7,11 @@ use crate::program::{Function, Program, ProgramInstructionFormatter};
 
 use cpp_demangle::DemangleOptions;
 use once_cell::sync::Lazy;
-use owo_colors::OwoColorize;
 use regex_lite::Regex;
 
 use std::collections::{HashMap, HashSet};
 use std::env;
+use std::io::IsTerminal;
 
 use rayon::prelude::*;
 
@@ -61,14 +61,19 @@ fn print_changes(program1: Box<Program>, program2: Box<Program>, changes: &[Func
     let mut formatter2 = ProgramInstructionFormatter::new(program2);
 
     for res in changes {
+        if std::io::stdout().is_terminal() {
+            print!("\x1b[1;36m");
+        }
+
+        print!("{}", res.name);
+
+        if std::io::stdout().is_terminal() {
+            print!("\x1b[0m");
+        }
+
         println!(
-            "{} changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
-            res.name
-                .if_supports_color(owo_colors::Stream::Stdout, |n| n.cyan()),
-            res.info.difference_types,
-            res.info.first_difference,
-            res.address1,
-            res.address2
+            " changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
+            res.info.difference_types, res.info.first_difference, res.address1, res.address2
         );
 
         let (instructions1, instructions2) = &res.info.instructions;
