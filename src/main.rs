@@ -104,34 +104,22 @@ fn print_changes(program1: Box<Program>, program2: Box<Program>, changes: &[Func
     }
 }
 
-fn main() {
-    let args: Vec<_> = env::args().collect();
-
-    if args.len() != 3 {
-        println!("Usage: {} <primary> <secondary>", args[0]);
-        return;
-    }
-
-    let (program1, program2) = rayon::join(
-        || Box::new(Program::load_path(&args[1])),
-        || Box::new(Program::load_path(&args[2])),
-    );
-
+fn get_changes(program1: &Program, program2: &Program) -> Vec<FunctionChange> {
     if program1.pointer_size != program2.pointer_size {
         panic!("pointer sizes don't match");
     }
 
-    let matcher = FunctionMatcher::new(&program2);
+    let matcher = FunctionMatcher::new(program2);
     let matches = program1
         .functions
         .par_iter()
-        .filter_map(|(name, func1)| Some((name, func1, matcher.match_name(&name)?)));
+        .filter_map(|(name, func1)| Some((name, func1, matcher.match_name(name)?)));
 
     let mut changes: Vec<FunctionChange> = matches
         .filter_map(|(name, func1, func2)| {
             match compare_functions(func1, func2, program1.pointer_size) {
                 CompareResult::Differs(compare_info) => {
-                    let name: String = demangle_symbol(&name).unwrap_or(name.to_string());
+                    let name: String = demangle_symbol(name).unwrap_or(name.to_string());
 
                     Some(FunctionChange {
                         info: compare_info,
@@ -147,5 +135,22 @@ fn main() {
 
     changes.par_sort_by(|a, b| a.address1.cmp(&b.address1));
 
+    changes
+}
+
+fn main() {
+    let args: Vec<_> = env::args().collect();
+
+    if args.len() != 3 {
+        println!("Usage: {} <primary> <secondary>", args[0]);
+        return;
+    }
+
+    let (program1, program2) = rayon::join(
+        || Box::new(Program::load_path(&args[1])),
+        || Box::new(Program::load_path(&args[2])),
+    );
+
+    let changes = get_changes(&program1, &program2);
     print_changes(program1, program2, &changes);
 }
