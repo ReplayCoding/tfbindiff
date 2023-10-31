@@ -110,13 +110,13 @@ fn get_changes(program1: &Program, program2: &Program) -> Vec<FunctionChange> {
     }
 
     let matcher = FunctionMatcher::new(program2);
-    let matches = program1
+
+    let mut changes: Vec<FunctionChange> = program1
         .functions
         .par_iter()
-        .filter_map(|(name, func1)| Some((name, func1, matcher.match_name(name)?)));
+        .filter_map(|(name, func1)| {
+            let func2 = matcher.match_name(name)?;
 
-    let mut changes: Vec<FunctionChange> = matches
-        .filter_map(|(name, func1, func2)| {
             match compare_functions(func1, func2, program1.pointer_size) {
                 CompareResult::Differs(compare_info) => {
                     let name: String = demangle_symbol(name).unwrap_or(name.to_string());
