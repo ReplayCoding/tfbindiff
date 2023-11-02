@@ -1,6 +1,6 @@
-use crate::compare::InstructionWrapper;
 use crate::demangle_symbol;
 use crate::eh_frame::get_fdes;
+use crate::instruction_wrapper::InstructionWrapper;
 use byteorder::LittleEndian;
 use iced_x86::Formatter;
 use object::{Object, ObjectSection};

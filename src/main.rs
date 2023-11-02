@@ -1,5 +1,6 @@
 mod compare;
 mod eh_frame;
+mod instruction_wrapper;
 mod matcher;
 mod program;
 
