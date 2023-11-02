@@ -45,8 +45,8 @@ fn print_changes(program1: Box<Program>, program2: Box<Program>, changes: &[Func
         }
 
         println!(
-            " changed ({:?}, first change @ {:08x}) [primary {:08x}, secondary {:08x}]",
-            res.info.difference_types, res.info.first_difference, res.address1, res.address2
+            " changed ({:?}) [primary {:08x}, secondary {:08x}]",
+            res.info.difference_types, res.address1, res.address2
         );
 
         let (instructions1, instructions2) = &res.info.instructions;
@@ -62,10 +62,15 @@ fn print_changes(program1: Box<Program>, program2: Box<Program>, changes: &[Func
                     old_len,
                     new_index,
                 } => {
-                    println!("deleted old {:08X} new {:08X}", old_index, new_index);
+                    println!(
+                        "deleted old {:08x} new {:08x}",
+                        &instructions1[old_index].get().ip(),
+                        &instructions2[new_index].get().ip()
+                    );
 
                     for i in formatter1.format(&instructions1[old_index..old_index + old_len]) {
                         println!("\t- {}", i);
+                        ()
                     }
                 }
                 similar::DiffOp::Insert {
@@ -73,7 +78,11 @@ fn print_changes(program1: Box<Program>, program2: Box<Program>, changes: &[Func
                     new_index,
                     new_len,
                 } => {
-                    println!("inserted new {:08X} old {:08X}", new_index, old_index);
+                    println!(
+                        "insert old {:08x} new {:08x}",
+                        &instructions1[old_index].get().ip(),
+                        &instructions2[new_index].get().ip()
+                    );
 
                     for i in formatter2.format(&instructions2[new_index..new_index + new_len]) {
                         println!("\t+ {}", i);
@@ -86,8 +95,9 @@ fn print_changes(program1: Box<Program>, program2: Box<Program>, changes: &[Func
                     new_len,
                 } => {
                     println!(
-                        "replace old {:08X} len {:08X} new {:08X} len {:08X}",
-                        new_index, new_len, old_index, old_len
+                        "insert old {:08x} new {:08x}",
+                        &instructions1[old_index].get().ip(),
+                        &instructions2[new_index].get().ip()
                     );
 
                     for i in formatter1.format(&instructions1[old_index..old_index + old_len]) {

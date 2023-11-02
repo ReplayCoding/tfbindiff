@@ -15,7 +15,6 @@ pub enum DifferenceType {
 }
 
 pub struct CompareInfo {
-    pub first_difference: u64,
     pub difference_types: Vec<DifferenceType>,
     pub diffops: Vec<similar::DiffOp>,
     pub instructions: (Vec<InstructionWrapper>, Vec<InstructionWrapper>),
@@ -35,7 +34,6 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         return CompareResult::Same();
     }
 
-    let mut first_difference: u64 = 0;
     let mut has_stack_depth: bool = false;
     let mut difference_types: Vec<DifferenceType> = vec![];
 
@@ -50,8 +48,6 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         InstructionIter::new(func2.address, &func2.content, pointer_size).collect();
 
     for (instr1, instr2) in std::iter::zip(&instructions1, &instructions2) {
-        first_difference = instr1.get().ip() - func1.address;
-
         if instr1 != instr2 {
             difference_types.push(DifferenceType::DifferentInstruction);
             break;
@@ -84,7 +80,6 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
             similar::capture_diff_slices(similar::Algorithm::Myers, &instructions1, &instructions2);
 
         CompareResult::Differs(CompareInfo {
-            first_difference,
             difference_types,
             diffops,
             instructions: (instructions1, instructions2),
