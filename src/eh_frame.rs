@@ -189,7 +189,7 @@ impl Cie {
         // Code Alignment Factor
         // An unsigned LEB128 encoded value that is factored out of all advance location instructions that
         // are associated with this CIE or its FDEs. This value shall be multiplied by the delta argument
-        // of an adavance location instruction to obtain the new location value.
+        // of an advance location instruction to obtain the new location value.
         let _code_alignment_factor = leb128::read::unsigned(data);
 
         // Data Alignment Factor
@@ -235,8 +235,6 @@ impl Cie {
         let mut fde_pointer_format: Option<EhPointerFormat> = None;
         let mut fde_pointer_application: Option<EhPointerApplication> = None;
         if let Some(augmentation_data) = augmentation_data {
-            // hexdump(&augmentation_data, 16);
-
             let mut augmentation_data = Cursor::new(&augmentation_data);
 
             let mut augmentation_string_iter = augmentation_string.chars();
@@ -244,7 +242,7 @@ impl Cie {
                 match augmentation {
                     // A 'z' may be present as the first character of the string. If present, the
                     // Augmentation Data field shall be present. The contents of the Augmentation
-                    // Data shall be intepreted according to other characters in the Augmentation
+                    // Data shall be interpreted according to other characters in the Augmentation
                     // String.
                     'z' => {}
 
@@ -326,7 +324,7 @@ impl Fde {
     ) -> Result<Fde, EhFrameError> {
         let offs = data.stream_position()?;
 
-        // - 4 because the stream is currently *after* the cie id, we want directly before
+        // - 4 because the stream is currently *after* the CIE id, we want directly before
         let absolute_cie_pointer = offs - cie_pointer as u64 - 4;
         let cie = cies
             .get(&absolute_cie_pointer)
@@ -412,14 +410,14 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
 
     // CIE ID
     // A 4 byte unsigned value that is used to distinguish CIE records from FDE records.
-    // For CIEs, This value shall always be 0, which indicates this record is a CIE.
-    // For FDEs, A 4 byte unsigned value that when subtracted from the offset of the the CIE
-    // Pointer in the current FDE yields the offset of the start of the associated CIE. This value
-    // shall never be 0.
     let cie_id = data.read_u32::<Endian>()?;
 
     let entry = match cie_id {
+        // For CIEs, This value shall always be 0, which indicates this record is a CIE.
         0 => EhFrameEntry::Cie(entry_offset, Cie::parse::<Endian, _>(data, pointer_size)?),
+        // For FDEs, A 4 byte unsigned value that when subtracted from the offset of the CIE
+        // Pointer in the current FDE yields the offset of the start of the associated CIE. This value
+        // shall never be 0.
         _ => EhFrameEntry::Fde(Fde::parse::<Endian, _>(
             data,
             cie_id,
@@ -432,7 +430,7 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
     let n_bytes_read = data.stream_position()? - start_pos;
     assert!(
         n_bytes_read <= length,
-        "number of bytes read overflowed cie length: {} > {}",
+        "number of bytes read overflowed CIE length: {} > {}",
         n_bytes_read,
         length
     );
