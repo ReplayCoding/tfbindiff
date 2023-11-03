@@ -34,7 +34,6 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         return CompareResult::Same();
     }
 
-    let mut has_stack_depth: bool = false;
     let mut difference_types: Vec<DifferenceType> = vec![];
 
     // New bytes, something was added!
@@ -47,17 +46,15 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
     let instructions2: Vec<InstructionWrapper> =
         InstructionIter::new(func2.address, &func2.content, pointer_size).collect();
 
-    for (instr1, instr2) in std::iter::zip(&instructions1, &instructions2) {
-        if instr1 != instr2 {
-            difference_types.push(DifferenceType::DifferentInstruction);
-            break;
-        }
+    if instructions1 != instructions2 {
+        difference_types.push(DifferenceType::DifferentInstruction);
+    }
 
+    for (instr1, instr2) in std::iter::zip(&instructions1, &instructions2) {
         // Opcode matches, let's check for stack depth
         // FIXME: Only handles 32-bit register
         // sub esp, <depth>
-        if !has_stack_depth
-            && instr1.get().mnemonic() == Mnemonic::Sub
+        if instr1.get().mnemonic() == Mnemonic::Sub
             && instr1.get().op0_kind() == OpKind::Register
             && instr1.get().op0_register() == Register::ESP
             && instr2.get().op0_kind() == OpKind::Register
@@ -70,7 +67,7 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
                 difference_types.push(DifferenceType::StackDepth);
             }
 
-            has_stack_depth = true;
+            break;
         }
     }
 
