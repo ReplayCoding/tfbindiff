@@ -1,4 +1,4 @@
-use crate::compare::CompareInfo;
+use crate::compare::FunctionChange;
 use crate::program::{Program, ProgramInstructionFormatter};
 use cpp_demangle::DemangleOptions;
 use std::io::IsTerminal;
@@ -8,25 +8,6 @@ pub fn demangle_symbol(name: &str) -> Option<String> {
     let options = DemangleOptions::new().no_params();
 
     sym.demangle(&options).ok()
-}
-
-pub struct FunctionChange {
-    info: CompareInfo,
-    name: String,
-    // HACK
-    pub address1: u64,
-    pub address2: u64,
-}
-
-impl FunctionChange {
-    pub fn new(info: CompareInfo, name: String, address1: u64, address2: u64) -> Self {
-        Self {
-            info,
-            name,
-            address1,
-            address2,
-        }
-    }
 }
 
 pub fn print_changes(program1: Box<Program>, program2: Box<Program>, changes: &[FunctionChange]) {

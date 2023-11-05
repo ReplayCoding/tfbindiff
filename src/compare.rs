@@ -1,6 +1,10 @@
 use crate::instruction_wrapper::{InstructionIter, InstructionWrapper};
-use crate::program::Function;
+use crate::matcher::FunctionMatcher;
+use crate::output::demangle_symbol;
+use crate::program::{Function, Program};
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
+
+use rayon::prelude::*;
 
 pub enum CompareResult {
     Same(),
@@ -84,4 +88,56 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
     } else {
         CompareResult::Same()
     }
+}
+
+pub struct FunctionChange {
+    pub info: CompareInfo,
+    pub name: String,
+    pub address1: u64,
+    pub address2: u64,
+}
+
+impl FunctionChange {
+    pub fn new(info: CompareInfo, name: String, address1: u64, address2: u64) -> Self {
+        Self {
+            info,
+            name,
+            address1,
+            address2,
+        }
+    }
+}
+
+pub fn compare_programs(program1: &Program, program2: &Program) -> Vec<FunctionChange> {
+    if program1.pointer_size != program2.pointer_size {
+        panic!("pointer sizes don't match");
+    }
+
+    let matcher = FunctionMatcher::new(program2);
+
+    let mut changes: Vec<FunctionChange> = program1
+        .functions
+        .par_iter()
+        .filter_map(|(name, func1)| {
+            let func2 = matcher.match_name(name)?;
+
+            match compare_functions(func1, func2, program1.pointer_size) {
+                CompareResult::Differs(compare_info) => {
+                    let name: String = demangle_symbol(name).unwrap_or(name.to_string());
+
+                    Some(FunctionChange::new(
+                        compare_info,
+                        name,
+                        func1.address,
+                        func2.address,
+                    ))
+                }
+                CompareResult::Same() => None,
+            }
+        })
+        .collect();
+
+    changes.par_sort_by(|a, b| a.address1.cmp(&b.address1));
+
+    changes
 }
