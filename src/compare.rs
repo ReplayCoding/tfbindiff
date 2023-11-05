@@ -1,5 +1,5 @@
 use crate::instruction_wrapper::{InstructionIter, InstructionWrapper};
-use crate::Function;
+use crate::program::Function;
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
 
 pub enum CompareResult {

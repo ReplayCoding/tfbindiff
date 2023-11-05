@@ -1,17 +1,13 @@
-use std::collections::HashMap;
-use std::io;
-use std::io::ErrorKind;
-
 use byteorder::ByteOrder;
 use byteorder::ReadBytesExt;
-
+use num_enum::TryFromPrimitive;
+use num_enum::TryFromPrimitiveError;
+use std::collections::HashMap;
+use std::io;
 use std::io::Cursor;
+use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Seek;
-
-use num_enum::TryFromPrimitiveError;
-
-use num_enum::TryFromPrimitive;
 use thiserror::Error;
 
 #[allow(non_camel_case_types)]

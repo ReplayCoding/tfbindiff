@@ -1,9 +1,7 @@
-use std::collections::{HashMap, HashSet};
-
+use crate::program::{Function, Program};
 use once_cell::sync::Lazy;
 use regex_lite::Regex;
-
-use crate::program::{Function, Program};
+use std::collections::{HashMap, HashSet};
 
 static STATIC_INITIALIZER_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^_?_GLOBAL__sub_I_(.*)\.stdout\.rel_tf_osx_builder\..*\.ii$").unwrap()

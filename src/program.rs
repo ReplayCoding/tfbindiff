@@ -1,11 +1,10 @@
-use crate::demangle_symbol;
 use crate::eh_frame::get_fdes;
 use crate::instruction_wrapper::InstructionWrapper;
+use crate::output::demangle_symbol;
 use byteorder::LittleEndian;
 use iced_x86::Formatter;
-use object::{Object, ObjectSection};
-
 use memmap2::Mmap;
+use object::{Object, ObjectSection};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
