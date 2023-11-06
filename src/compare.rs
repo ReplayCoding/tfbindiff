@@ -1,6 +1,5 @@
 use crate::instruction_wrapper::{InstructionIter, InstructionWrapper};
 use crate::matcher::FunctionMatcher;
-use crate::output::demangle_symbol;
 use crate::program::{Function, Program};
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
 
@@ -122,16 +121,12 @@ pub fn compare_programs(program1: &Program, program2: &Program) -> Vec<FunctionC
             let func2 = matcher.match_name(name)?;
 
             match compare_functions(func1, func2, program1.pointer_size) {
-                CompareResult::Differs(compare_info) => {
-                    let name: String = demangle_symbol(name).unwrap_or(name.to_string());
-
-                    Some(FunctionChange::new(
-                        compare_info,
-                        name,
-                        func1.address,
-                        func2.address,
-                    ))
-                }
+                CompareResult::Differs(compare_info) => Some(FunctionChange::new(
+                    compare_info,
+                    name.to_string(),
+                    func1.address,
+                    func2.address,
+                )),
                 CompareResult::Same() => None,
             }
         })

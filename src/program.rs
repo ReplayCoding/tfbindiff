@@ -1,8 +1,5 @@
 use crate::eh_frame::get_fdes;
-use crate::instruction_wrapper::InstructionWrapper;
-use crate::output::demangle_symbol;
 use byteorder::LittleEndian;
-use iced_x86::Formatter;
 use memmap2::Mmap;
 use object::{Object, ObjectSection};
 use std::collections::HashMap;
@@ -24,7 +21,7 @@ impl Function {
 pub struct Program {
     pub pointer_size: usize,
     pub functions: HashMap<String, Function>,
-    symbol_map: HashMap<u64, String>,
+    pub symbol_map: HashMap<u64, String>,
 }
 
 impl Program {
@@ -104,47 +101,5 @@ impl Program {
             functions,
             symbol_map,
         }
-    }
-}
-
-impl iced_x86::SymbolResolver for Program {
-    fn symbol(
-        &mut self,
-        _instruction: &iced_x86::Instruction,
-        _operand: u32,
-        _instruction_operand: Option<u32>,
-        address: u64,
-        _address_size: u32,
-    ) -> Option<iced_x86::SymbolResult<'_>> {
-        let mangled_name = self.symbol_map.get(&address)?;
-        let name = demangle_symbol(mangled_name).unwrap_or(mangled_name.clone());
-
-        Some(iced_x86::SymbolResult::with_string(address, name))
-    }
-}
-
-pub struct ProgramInstructionFormatter {
-    formatter: iced_x86::IntelFormatter,
-}
-
-impl ProgramInstructionFormatter {
-    pub fn new(program: Box<Program>) -> Self {
-        Self {
-            formatter: iced_x86::IntelFormatter::with_options(Some(program), None),
-        }
-    }
-
-    pub fn format(&mut self, instructions: &[InstructionWrapper]) -> Vec<String> {
-        let mut formatted_instructions = vec![];
-        formatted_instructions.reserve(instructions.len());
-
-        for instruction in instructions {
-            let mut out = String::new();
-            self.formatter.format(instruction.get(), &mut out);
-
-            formatted_instructions.push(out);
-        }
-
-        formatted_instructions
     }
 }
