@@ -25,8 +25,8 @@ pub struct Program {
 }
 
 impl Program {
-    fn get_data_at_address<'a, O: Object<'a, 'a>>(
-        object: &'a O,
+    fn get_data_at_address<'data>(
+        object: &object::File<'data>,
         address: u64,
         size: u64,
     ) -> Option<Vec<u8>> {
@@ -49,16 +49,11 @@ impl Program {
         None
     }
 
-    pub fn load_path(filename: &str) -> Program {
-        let path = Path::new(filename);
-        let file = fs::File::open(path).unwrap();
-        let buffer = unsafe { Mmap::map(&file).unwrap() };
-        let object = object::File::parse(&*buffer).unwrap();
+    pub fn load(filename: &Path) -> Program {
+        let file = fs::File::open(Path::new(filename)).unwrap();
+        let mapped_file = unsafe { Mmap::map(&file).unwrap() };
+        let object = object::File::parse(&*mapped_file).unwrap();
 
-        Program::load(&object)
-    }
-
-    pub fn load<'a, O: Object<'a, 'a>>(object: &'a O) -> Program {
         let pointer_size = if object.is_64() { 8 } else { 4 };
 
         let eh_frame = object.section_by_name(".eh_frame").unwrap();
@@ -85,7 +80,7 @@ impl Program {
                     name.to_string(),
                     Function::new(
                         fde.begin,
-                        Self::get_data_at_address(object, fde.begin, fde.length).unwrap(),
+                        Self::get_data_at_address(&object, fde.begin, fde.length).unwrap(),
                     ),
                 );
             } else {

@@ -5,9 +5,10 @@ mod matcher;
 mod output;
 mod program;
 
-use compare::compare_programs;
-use output::print_changes;
-use program::Program;
+use crate::compare::compare_programs;
+use crate::output::print_changes;
+use crate::program::Program;
+use std::path::Path;
 
 fn main() {
     let args: Vec<_> = std::env::args().collect();
@@ -18,8 +19,8 @@ fn main() {
     }
 
     let (program1, program2) = rayon::join(
-        || Box::new(Program::load_path(&args[1])),
-        || Box::new(Program::load_path(&args[2])),
+        || Box::new(Program::load(Path::new(&args[1]))),
+        || Box::new(Program::load(Path::new(&args[2]))),
     );
 
     let changes = compare_programs(&program1, &program2);
