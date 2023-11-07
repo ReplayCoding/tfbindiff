@@ -8,13 +8,21 @@ use std::io::Cursor;
 use std::path::Path;
 
 pub struct Function {
-    pub address: u64,
-    pub content: Vec<u8>,
+    address: u64,
+    content: Vec<u8>,
 }
 
 impl Function {
     pub fn new(address: u64, content: Vec<u8>) -> Function {
         Function { address, content }
+    }
+
+    pub fn address(&self) -> u64 {
+        self.address
+    }
+
+    pub fn content(&self) -> &[u8] {
+        &self.content
     }
 }
 

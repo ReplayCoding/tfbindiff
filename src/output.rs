@@ -71,7 +71,7 @@ pub fn print_changes(program1: Box<Program>, program2: Box<Program>, changes: &[
             print!("\x1b[1;36m");
         }
 
-        let name: String = demangle_symbol(&res.name).unwrap_or(res.name.clone());
+        let name: String = demangle_symbol(res.name()).unwrap_or(res.name().to_string());
         print!("{}", name);
 
         if std::io::stdout().is_terminal() {
@@ -80,11 +80,12 @@ pub fn print_changes(program1: Box<Program>, program2: Box<Program>, changes: &[
 
         println!(
             " changed [primary {:08x}, secondary {:08x}]",
-            res.address1, res.address2
+            res.address1(),
+            res.address2()
         );
 
-        let (instructions1, instructions2) = &res.info.instructions;
-        for op in &res.info.diffops {
+        let (instructions1, instructions2) = res.instructions();
+        for op in res.diff_ops() {
             match *op {
                 similar::DiffOp::Equal {
                     old_index: _,
