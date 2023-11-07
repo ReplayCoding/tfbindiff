@@ -79,8 +79,8 @@ pub fn print_changes(program1: Box<Program>, program2: Box<Program>, changes: &[
         }
 
         println!(
-            " changed ({:?}) [primary {:08x}, secondary {:08x}]",
-            res.info.difference_types, res.address1, res.address2
+            " changed [primary {:08x}, secondary {:08x}]",
+            res.address1, res.address2
         );
 
         let (instructions1, instructions2) = &res.info.instructions;

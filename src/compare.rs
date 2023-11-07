@@ -10,15 +10,7 @@ pub enum CompareResult {
     Differs(CompareInfo),
 }
 
-#[derive(Debug)]
-pub enum DifferenceType {
-    FunctionLength,
-    DifferentInstruction,
-    StackDepth,
-}
-
 pub struct CompareInfo {
-    pub difference_types: Vec<DifferenceType>,
     pub diffops: Vec<similar::DiffOp>,
     pub instructions: (Vec<InstructionWrapper>, Vec<InstructionWrapper>),
 }
@@ -37,11 +29,11 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         return CompareResult::Same();
     }
 
-    let mut difference_types: Vec<DifferenceType> = vec![];
+    let mut has_difference = false;
 
     // New bytes, something was added!
     if func1.content.len() != func2.content.len() {
-        difference_types.push(DifferenceType::FunctionLength);
+        has_difference = true;
     }
 
     let instructions1: Vec<InstructionWrapper> =
@@ -50,7 +42,7 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
         InstructionIter::new(func2.address, &func2.content, pointer_size).collect();
 
     if instructions1 != instructions2 {
-        difference_types.push(DifferenceType::DifferentInstruction);
+        has_difference = true;
     }
 
     for (instr1, instr2) in std::iter::zip(&instructions1, &instructions2) {
@@ -67,20 +59,19 @@ pub fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize
             let stack_depth2: i64 = get_stack_depth_from_instruction(instr2.get());
 
             if stack_depth1 != stack_depth2 {
-                difference_types.push(DifferenceType::StackDepth);
+                has_difference = true;
             }
 
             break;
         }
     }
 
-    if !difference_types.is_empty() {
+    if has_difference {
         // NOTE: Lcs panics on oob, wtf?
         let diffops =
             similar::capture_diff_slices(similar::Algorithm::Myers, &instructions1, &instructions2);
 
         CompareResult::Differs(CompareInfo {
-            difference_types,
             diffops,
             instructions: (instructions1, instructions2),
         })
