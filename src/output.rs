@@ -13,8 +13,9 @@ fn demangle_symbol(name: &str) -> Option<String> {
 }
 
 struct ProgramSymbolResolver {
-    // Why isn't this a reference? Because the iced formatter api is stupid and takes an owned box!
-    program: Box<Program>,
+    // Why does this have a static lifetime? Because the iced formatter api is stupid and takes an
+    // owned box, instead of a reference.
+    program: &'static Program,
 }
 
 impl iced_x86::SymbolResolver for ProgramSymbolResolver {
@@ -38,7 +39,7 @@ struct ProgramInstructionFormatter {
 }
 
 impl ProgramInstructionFormatter {
-    fn new(program: Box<Program>) -> Self {
+    fn new(program: &'static Program) -> Self {
         Self {
             formatter: iced_x86::IntelFormatter::with_options(
                 Some(Box::new(ProgramSymbolResolver { program })),
@@ -62,7 +63,11 @@ impl ProgramInstructionFormatter {
     }
 }
 
-pub fn print_changes(program1: Box<Program>, program2: Box<Program>, changes: &[FunctionChange]) {
+pub fn print_changes(
+    program1: &'static Program,
+    program2: &'static Program,
+    changes: &[FunctionChange],
+) {
     let mut formatter1 = ProgramInstructionFormatter::new(program1);
     let mut formatter2 = ProgramInstructionFormatter::new(program2);
 

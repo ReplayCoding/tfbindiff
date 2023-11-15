@@ -24,5 +24,5 @@ fn main() {
     );
 
     let changes = compare_programs(&program1, &program2);
-    print_changes(program1, program2, &changes);
+    print_changes(Box::leak(program1), Box::leak(program2), &changes);
 }
