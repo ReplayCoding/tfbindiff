@@ -10,6 +10,7 @@ enum CompareResult {
     Differs(CompareInfo),
 }
 
+#[derive(Clone)]
 struct CompareInfo {
     diff_ops: Vec<similar::DiffOp>,
     instructions: (Vec<InstructionWrapper>, Vec<InstructionWrapper>),
@@ -81,6 +82,7 @@ fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize) ->
     }
 }
 
+#[derive(Clone)]
 pub struct FunctionChange {
     info: CompareInfo,
     name: String,

@@ -23,6 +23,10 @@
         # For `nix develop`:
         devShell = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [ rustc cargo rustfmt clippy ];
+          
+          shellHook = ''
+              export LD_LIBRARY_PATH=/run/opengl-driver/lib/:${pkgs.lib.makeLibraryPath (with pkgs; [libGL libGLU wayland libxkbcommon])}
+          '';
         };
       }
     );

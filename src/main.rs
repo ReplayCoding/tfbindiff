@@ -1,12 +1,13 @@
 mod compare;
 mod eh_frame;
+mod gui;
 mod instruction_wrapper;
 mod matcher;
-mod output;
 mod program;
+mod split_diff;
+mod util;
 
 use crate::compare::compare_programs;
-use crate::output::print_changes;
 use crate::program::Program;
 use std::path::Path;
 
@@ -24,5 +25,6 @@ fn main() {
     );
 
     let changes = compare_programs(&program1, &program2);
-    print_changes(Box::leak(program1), Box::leak(program2), &changes);
+
+    gui::run(Box::leak(program1), Box::leak(program2), &changes);
 }

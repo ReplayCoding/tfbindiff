@@ -33,11 +33,7 @@ pub struct Program {
 }
 
 impl Program {
-    fn get_data_at_address<'data>(
-        object: &object::File<'data>,
-        address: u64,
-        size: u64,
-    ) -> Option<Vec<u8>> {
+    fn get_data_at_address(object: &object::File<'_>, address: u64, size: u64) -> Option<Vec<u8>> {
         for section in object.sections() {
             if section.address() > address || (section.address() + section.size()) <= address {
                 continue;
