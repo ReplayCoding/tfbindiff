@@ -157,17 +157,18 @@ impl Cie {
         let version = data.read_u8()?;
         assert_eq!(version, 1, "version mismatch: {} != 1", version);
 
-        let mut augmentation_string = String::new();
-
         // Augmentation String
         // This value is a NUL terminated string that identifies the augmentation to the CIE or to the
         // FDEs associated with this CIE. A zero length string indicates that no augmentation data is
         // present. The augmentation string is case sensitive.
-        let mut augmentation = data.read_u8()?;
-        while augmentation != 0 {
-            augmentation_string.push(augmentation.into());
+        let mut augmentation_string = String::new();
+        loop {
+            let augmentation = data.read_u8()?;
+            if augmentation == 0 {
+                break;
+            }
 
-            augmentation = data.read_u8()?;
+            augmentation_string.push(augmentation.into());
         }
 
         // EH Data
@@ -374,11 +375,10 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
     // including the Length field itself.
     let mut length: u64 = match data.read_u32::<Endian>() {
         Ok(l) => Ok(l.into()),
-        // Some compilers don't put a terminator CIE in the section, and so we get an EOF. In
-        // this case we return 0, which will be handled below
+        // Some compilers don't put a terminator CIE in the section, and so we get an EOF.
         Err(e) => {
             if e.kind() == ErrorKind::UnexpectedEof {
-                Ok(0)
+                return Ok(None);
             } else {
                 Err(e)
             }
