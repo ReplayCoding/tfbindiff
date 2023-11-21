@@ -26,7 +26,7 @@ impl Hash for InstructionWrapper {
 
 impl Ord for InstructionWrapper {
     fn cmp(&self, _other: &Self) -> std::cmp::Ordering {
-        // For some reason this is required to diff, but not used??
+        // See: https://github.com/mitsuhiko/similar/issues/50
         todo!("implement Ord for instructions")
     }
 }
