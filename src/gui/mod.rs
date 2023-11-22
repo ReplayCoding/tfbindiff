@@ -4,7 +4,7 @@ use egui_extras::TableBuilder;
 
 use crate::{
     compare::FunctionChange, instruction_wrapper::InstructionWrapper, program::Program,
-    split_diff::SplitDiffCell, util::ProgramInstructionFormatter,
+    split_diff::DiffCell, util::ProgramInstructionFormatter,
 };
 
 use rayon::prelude::*;
@@ -14,7 +14,7 @@ struct CachedFunctionChange {
     address1: u64,
     address2: u64,
 
-    lines: Vec<(SplitDiffCell<String>, SplitDiffCell<String>)>,
+    lines: Vec<(DiffCell<String>, DiffCell<String>)>,
 }
 
 impl CachedFunctionChange {
@@ -36,11 +36,11 @@ impl CachedFunctionChange {
         program1: &'static Program,
         program2: &'static Program,
         change: &FunctionChange,
-    ) -> Vec<(SplitDiffCell<String>, SplitDiffCell<String>)> {
+    ) -> Vec<(DiffCell<String>, DiffCell<String>)> {
         let (instructions1, instructions2) = change.instructions();
 
         let split_diff =
-            crate::split_diff::build_split_diff(instructions1, instructions2, change.diff_ops());
+            crate::split_diff::build(instructions1, instructions2, change.diff_ops());
 
         let mut formatter1 = ProgramInstructionFormatter::new(program1);
         let mut formatter2 = ProgramInstructionFormatter::new(program2);
@@ -51,13 +51,13 @@ impl CachedFunctionChange {
             };
 
         let fmt_cell = |formatter: &mut ProgramInstructionFormatter,
-                        cell: &SplitDiffCell<InstructionWrapper>| {
+                        cell: &DiffCell<InstructionWrapper>| {
             match cell {
-                SplitDiffCell::Hidden => SplitDiffCell::Hidden,
-                SplitDiffCell::Collapsed => SplitDiffCell::Collapsed,
-                SplitDiffCell::Default(i) => SplitDiffCell::Default(fmt_line(formatter, i)),
-                SplitDiffCell::Insert(i) => SplitDiffCell::Insert(fmt_line(formatter, i)),
-                SplitDiffCell::Delete(i) => SplitDiffCell::Delete(fmt_line(formatter, i)),
+                DiffCell::Hidden => DiffCell::Hidden,
+                DiffCell::Collapsed => DiffCell::Collapsed,
+                DiffCell::Default(i) => DiffCell::Default(fmt_line(formatter, i)),
+                DiffCell::Insert(i) => DiffCell::Insert(fmt_line(formatter, i)),
+                DiffCell::Delete(i) => DiffCell::Delete(fmt_line(formatter, i)),
             }
         };
 
@@ -165,15 +165,15 @@ impl DiffViewerApp {
                     .body(|body| {
                         body.rows(text_height, change.lines.len(), |row_index, mut row| {
                             let (line1, line2) = &change.lines[row_index];
-                            let build_line = |line: &SplitDiffCell<String>| match line {
-                                SplitDiffCell::Hidden => RichText::new(""),
-                                SplitDiffCell::Collapsed => RichText::new("..."),
+                            let build_line = |line: &DiffCell<String>| match line {
+                                DiffCell::Hidden => RichText::new(""),
+                                DiffCell::Collapsed => RichText::new("..."),
 
-                                SplitDiffCell::Default(line) => RichText::new(line),
-                                SplitDiffCell::Insert(line) => {
+                                DiffCell::Default(line) => RichText::new(line),
+                                DiffCell::Insert(line) => {
                                     RichText::new(line).color(egui::Color32::GREEN)
                                 }
-                                SplitDiffCell::Delete(line) => {
+                                DiffCell::Delete(line) => {
                                     RichText::new(line).color(egui::Color32::RED)
                                 }
                             };
