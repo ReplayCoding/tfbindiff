@@ -26,7 +26,7 @@ impl iced_x86::SymbolResolver for ProgramSymbolResolver {
         _address_size: u32,
     ) -> Option<iced_x86::SymbolResult<'_>> {
         let mangled_name = self.program.symbol_map.get(&address)?;
-        let name = demangle_symbol(mangled_name).unwrap_or(mangled_name.clone());
+        let name = demangle_symbol(mangled_name).unwrap_or_else(|| mangled_name.clone());
 
         Some(iced_x86::SymbolResult::with_string(address, name))
     }
