@@ -41,8 +41,8 @@ impl Program {
 
             return if let Ok(section_data) = section.uncompressed_data() {
                 let relative_address = address - section.address();
-                let data =
-                    &section_data[(relative_address as usize)..(relative_address + size) as usize];
+                let data = &section_data[(usize::try_from(relative_address)).ok()?
+                    ..usize::try_from(relative_address + size).ok()?];
 
                 Some(data.to_vec())
             } else {
