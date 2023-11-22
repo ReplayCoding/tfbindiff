@@ -61,7 +61,7 @@ where
                 old_len,
                 new_index: _,
             } => {
-                for old_item in old[old_index..old_index + old_len].iter() {
+                for old_item in &old[old_index..old_index + old_len] {
                     cells.push((
                         SplitDiffCell::Delete(old_item.clone()),
                         SplitDiffCell::Hidden,
@@ -73,7 +73,7 @@ where
                 new_index,
                 new_len,
             } => {
-                for new_item in new[new_index..new_index + new_len].iter() {
+                for new_item in &new[new_index..new_index + new_len] {
                     cells.push((
                         SplitDiffCell::Hidden,
                         SplitDiffCell::Insert(new_item.clone()),

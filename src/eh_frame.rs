@@ -151,11 +151,11 @@ impl Cie {
     fn parse<Endian: ByteOrder, R: Read + Seek>(
         data: &mut R,
         pointer_size: usize,
-    ) -> Result<Cie, EhFrameError> {
+    ) -> Result<Self, EhFrameError> {
         // Version
         // Version assigned to the call frame information structure. This value shall be 1.
         let version = data.read_u8()?;
-        assert_eq!(version, 1, "version mismatch: {} != 1", version);
+        assert_eq!(version, 1, "version mismatch: {version} != 1");
 
         // Augmentation String
         // This value is a NUL terminated string that identifies the augmentation to the CIE or to the
@@ -250,8 +250,7 @@ impl Cie {
                         assert_eq!(
                             Some('h'),
                             next_char,
-                            "saw '{:?}' in augmentation, expected 'h' ('eh')",
-                            next_char
+                            "saw '{next_char:?}' in augmentation, expected 'h' ('eh')"
                         );
                     }
 
@@ -304,7 +303,7 @@ impl Cie {
             }
         }
 
-        Ok(Cie {
+        Ok(Self {
             fde_pointer_format,
             fde_pointer_application,
         })
@@ -318,11 +317,11 @@ impl Fde {
         cies: &HashMap<u64, Cie>,
         pointer_size: usize,
         base_address: u64,
-    ) -> Result<Fde, EhFrameError> {
+    ) -> Result<Self, EhFrameError> {
         let offs = data.stream_position()?;
 
         // - 4 because the stream is currently *after* the CIE id, we want directly before
-        let absolute_cie_pointer = offs - cie_pointer as u64 - 4;
+        let absolute_cie_pointer = offs - u64::from(cie_pointer) - 4;
         let cie = cies
             .get(&absolute_cie_pointer)
             .ok_or(EhFrameError::InvalidCie(
@@ -355,7 +354,7 @@ impl Fde {
             _ => todo!("unhandled pointer size: {}", pointer_size),
         };
 
-        Ok(Fde {
+        Ok(Self {
             begin: pc_begin,
             length: pc_range,
         })
@@ -387,7 +386,7 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
 
     // If Length contains the value 0xffffffff, then the length is contained in the Extended
     // Length field.
-    if length == 0xffffffff {
+    if length == 0xffff_ffff {
         // Extended Length
         // A 8 byte unsigned value indicating the length in bytes of the CIE structure, not
         // including the Length and Extended Length fields.
@@ -426,9 +425,7 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
     let n_bytes_read = data.stream_position()? - start_pos;
     assert!(
         n_bytes_read <= length,
-        "number of bytes read overflowed CIE length: {} > {}",
-        n_bytes_read,
-        length
+        "number of bytes read overflowed CIE length: {n_bytes_read} > {length}"
     );
 
     // Skip over unread padding

@@ -13,8 +13,8 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new(address: u64, content: Vec<u8>) -> Function {
-        Function { address, content }
+    pub fn new(address: u64, content: Vec<u8>) -> Self {
+        Self { address, content }
     }
 
     pub fn address(&self) -> u64 {
@@ -53,7 +53,7 @@ impl Program {
         None
     }
 
-    pub fn load(filename: &Path) -> Program {
+    pub fn load(filename: &Path) -> Self {
         let file = fs::File::open(Path::new(filename)).unwrap();
         let mapped_file = unsafe { Mmap::map(&file).unwrap() };
         let object = object::File::parse(&*mapped_file).unwrap();
@@ -95,7 +95,7 @@ impl Program {
             }
         }
 
-        Program {
+        Self {
             pointer_size,
             functions,
             symbol_map,
