@@ -9,7 +9,13 @@ mod util;
 
 use crate::compare::compare_programs;
 use crate::program::Program;
+use std::fs;
 use std::path::Path;
+
+fn load_file(filename: &str) -> memmap2::Mmap {
+    let file = fs::File::open(Path::new(filename)).unwrap();
+    unsafe { memmap2::Mmap::map(&file).unwrap() }
+}
 
 fn main() {
     let args: Vec<_> = std::env::args().collect();
@@ -20,8 +26,8 @@ fn main() {
     }
 
     let (program1, program2) = (
-        Box::new(Program::load(Path::new(&args[1]))),
-        Box::new(Program::load(Path::new(&args[2]))),
+        Box::new(Program::load(&load_file(&args[1]))),
+        Box::new(Program::load(&load_file(&args[2]))),
     );
 
     let changes = compare_programs(&program1, &program2);

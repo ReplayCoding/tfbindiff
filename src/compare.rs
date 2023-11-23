@@ -120,7 +120,10 @@ impl FunctionChange {
 }
 
 pub fn compare_programs(program1: &Program, program2: &Program) -> Vec<FunctionChange> {
-    assert!(program1.pointer_size == program2.pointer_size, "pointer sizes don't match");
+    assert!(
+        program1.pointer_size == program2.pointer_size,
+        "pointer sizes don't match"
+    );
 
     let matcher = FunctionMatcher::new(program2);
 

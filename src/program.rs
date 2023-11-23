@@ -1,11 +1,8 @@
 use crate::eh_frame::get_fdes;
 use byteorder::LittleEndian;
-use memmap2::Mmap;
 use object::{Object, ObjectSection};
 use std::collections::HashMap;
-use std::fs;
 use std::io::Cursor;
-use std::path::Path;
 
 pub struct Function {
     address: u64,
@@ -53,10 +50,8 @@ impl Program {
         None
     }
 
-    pub fn load(filename: &Path) -> Self {
-        let file = fs::File::open(Path::new(filename)).unwrap();
-        let mapped_file = unsafe { Mmap::map(&file).unwrap() };
-        let object = object::File::parse(&*mapped_file).unwrap();
+    pub fn load(data: &[u8]) -> Self {
+        let object = object::File::parse(data).unwrap();
 
         let pointer_size = if object.is_64() { 8 } else { 4 };
 

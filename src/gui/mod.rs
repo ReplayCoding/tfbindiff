@@ -37,8 +37,7 @@ impl CachedFunctionChange {
     ) -> Vec<(DiffCell<String>, DiffCell<String>)> {
         let (instructions1, instructions2) = change.instructions();
 
-        let split_diff =
-            crate::split_diff::build(instructions1, instructions2, change.diff_ops());
+        let split_diff = crate::split_diff::build(instructions1, instructions2, change.diff_ops());
 
         let mut formatter1 = ProgramInstructionFormatter::new(program1);
         let mut formatter2 = ProgramInstructionFormatter::new(program2);
