@@ -7,8 +7,6 @@ use crate::{
     split_diff::DiffCell, util::ProgramInstructionFormatter,
 };
 
-use rayon::prelude::*;
-
 struct CachedFunctionChange {
     name: String,
     address1: u64,
@@ -94,7 +92,7 @@ impl DiffViewerApp {
         Self {
             mode: DiffViewerMode::FunctionList,
             changes: changes
-                .par_iter()
+                .iter()
                 .map(|c| CachedFunctionChange::new(program1, program2, c))
                 .collect(),
         }

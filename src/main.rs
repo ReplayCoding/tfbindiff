@@ -19,9 +19,9 @@ fn main() {
         return;
     }
 
-    let (program1, program2) = rayon::join(
-        || Box::new(Program::load(Path::new(&args[1]))),
-        || Box::new(Program::load(Path::new(&args[2]))),
+    let (program1, program2) = (
+        Box::new(Program::load(Path::new(&args[1]))),
+        Box::new(Program::load(Path::new(&args[2]))),
     );
 
     let changes = compare_programs(&program1, &program2);
