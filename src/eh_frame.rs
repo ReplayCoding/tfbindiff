@@ -130,14 +130,11 @@ fn read_encoded<Endian: ByteOrder, R: Read + Seek>(
 ) -> Result<u64, EhFrameError> {
     let pcrel_offs = data.stream_position()?;
     let unapplied_value = read_encoded_no_application::<Endian, _>(data, format, pointer_size)?;
-    let applied_value = match application {
+    let applied_value: u64 = match application {
         EhPointerApplication::DW_EH_PE_pcrel => match pointer_size {
-            4 => {
-                let unapplied_value = unapplied_value as u32;
-                unapplied_value
-                    .wrapping_add((base_address + pcrel_offs) as u32)
-                    .into()
-            }
+            4 => u32::try_from(unapplied_value.wrapping_add((base_address + pcrel_offs).into()))
+                .unwrap()
+                .into(),
             _ => todo!("unhandled pointer size: {}", pointer_size),
         },
 
@@ -222,7 +219,7 @@ impl Cie {
         // 'z'.
         let mut augmentation_data: Option<Vec<u8>> = None;
         if let Some(augmentation_data_length) = augmentation_data_length {
-            let mut buf = vec![0u8; augmentation_data_length as usize];
+            let mut buf = vec![0u8; augmentation_data_length.try_into().unwrap()];
 
             data.read_exact(&mut buf)?;
 
@@ -429,7 +426,9 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
     );
 
     // Skip over unread padding
-    data.seek(io::SeekFrom::Current((length - n_bytes_read) as i64))?;
+    data.seek(io::SeekFrom::Current(
+        (length - n_bytes_read).try_into().unwrap(),
+    ))?;
 
     Ok(Some(entry))
 }

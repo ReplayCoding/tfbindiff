@@ -45,7 +45,7 @@ impl<'a> InstructionIter<'a> {
     pub fn new(address: u64, code: &'a [u8], address_size: usize) -> Self {
         Self {
             decoder: Decoder::with_ip(
-                (address_size * 8) as u32,
+                (address_size * 8).try_into().unwrap(),
                 code,
                 address,
                 DecoderOptions::NONE,
