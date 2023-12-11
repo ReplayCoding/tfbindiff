@@ -132,8 +132,9 @@ fn read_encoded<Endian: ByteOrder, R: Read + Seek>(
     let unapplied_value = read_encoded_no_application::<Endian, _>(data, format, pointer_size)?;
     let applied_value: u64 = match application {
         EhPointerApplication::DW_EH_PE_pcrel => match pointer_size {
-            4 => u32::try_from(unapplied_value.wrapping_add((base_address + pcrel_offs).into()))
+            4 => u32::try_from(unapplied_value)
                 .unwrap()
+                .wrapping_add((base_address + pcrel_offs).try_into().unwrap())
                 .into(),
             _ => todo!("unhandled pointer size: {}", pointer_size),
         },
