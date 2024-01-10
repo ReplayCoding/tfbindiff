@@ -135,7 +135,7 @@ fn read_encoded<Endian: ByteOrder, R: Read + Seek>(
             // Fairly certain there's something subtly wrong with this :)
             4 => u32::try_from(base_address + pcrel_offs)
                 .unwrap()
-                .wrapping_add_signed(i32::try_from(unapplied_value).unwrap())
+                .wrapping_add(u32::try_from(unapplied_value).unwrap())
                 .into(),
             _ => todo!("unhandled pointer size: {}", pointer_size),
         },
