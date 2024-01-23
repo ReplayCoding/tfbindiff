@@ -137,8 +137,8 @@ fn draw_diff_view(change: &CachedFunctionChange, mode: &mut DiffViewerMode, ui: 
                 .columns(egui_extras::Column::exact(column_width), 2)
                 .min_scrolled_height(available_height)
                 .body(|body| {
-                    body.rows(text_height, change.lines.len(), |row_index, mut row| {
-                        let (line1, line2) = &change.lines[row_index];
+                    body.rows(text_height, change.lines.len(), |mut row| {
+                        let (line1, line2) = &change.lines[row.index()];
                         let build_line = |line: &DiffCell<String>| match line {
                             DiffCell::Hidden => RichText::new(""),
                             DiffCell::Collapsed => RichText::new("..."),
