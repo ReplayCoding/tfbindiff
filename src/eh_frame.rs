@@ -109,13 +109,13 @@ fn read_encoded_no_application<Endian: ByteOrder, R: Read + Seek>(
     data: &mut R,
     format: EhPointerFormat,
     pointer_size: usize,
-) -> Result<i128, EhFrameError> {
+) -> Result<u64, EhFrameError> {
     Ok(match format {
         EhPointerFormat::DW_EH_PE_absptr => match pointer_size {
             4 => data.read_u32::<Endian>()?.into(),
             _ => todo!("unhandled pointer size: {}", pointer_size),
         },
-        EhPointerFormat::DW_EH_PE_sdata4 => data.read_i32::<Endian>()?.into(),
+        EhPointerFormat::DW_EH_PE_sdata4 => data.read_u32::<Endian>()?.into(),
 
         _ => todo!("unhandled format {:?}", format),
     })
