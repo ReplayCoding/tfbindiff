@@ -11,6 +11,7 @@ use crate::split_diff::DiffCell;
 
 struct CachedFunctionChange {
     name: String,
+    mangled_name: String,
     address1: u64,
     address2: u64,
 
@@ -26,6 +27,7 @@ impl CachedFunctionChange {
         Self {
             name: tfbindiff::util::demangle_symbol(change.name())
                 .unwrap_or_else(|| change.name().to_string()),
+            mangled_name: change.name().to_string(),
             address1: change.address1(),
             address2: change.address2(),
             lines: Self::build_split_diff_lines(program1, program2, change),
@@ -110,7 +112,7 @@ fn draw_diff_view(change: &CachedFunctionChange, mode: &mut DiffViewerMode, ui: 
             *mode = DiffViewerMode::FunctionList;
         }
 
-        ui.heading(format!("Comparing {}", &change.name));
+        ui.heading(format!("Comparing {}", &change.name)).on_hover_text(&change.mangled_name);
         // TODO: Make the addresses copyable
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
             ui.heading(format!(
