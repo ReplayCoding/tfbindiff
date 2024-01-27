@@ -1,4 +1,4 @@
-use iced_x86::{Decoder, DecoderOptions, Instruction};
+use iced_x86::{Decoder, DecoderOptions, Instruction, OpKind};
 use std::hash::Hash;
 
 #[derive(Clone, Copy)]
@@ -12,21 +12,35 @@ impl InstructionWrapper {
 impl Eq for InstructionWrapper {}
 impl PartialEq for InstructionWrapper {
     fn eq(&self, other: &Self) -> bool {
-        (self.0.code() == other.0.code())
+        if (self.0.code() == other.0.code())
             && (self.0.op_code().op_kinds() == other.0.op_code().op_kinds())
+        {
+            for op_idx in 0..self.0.op_count() {
+                if self.0.op_kind(op_idx) == OpKind::Register {
+                    let reg1 = self.0.op_register(op_idx);
+                    let reg2 = other.0.op_register(op_idx);
+
+                    if reg1 != reg2 {
+                        return false;
+                    }
+                };
+            }
+            return true;
+        }
+
+        false
     }
 }
 
 impl Hash for InstructionWrapper {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.code().hash(state);
-        self.0.op_code().op_kinds().hash(state);
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
+        // See: https://github.com/mitsuhiko/similar/issues/50, same for Ord
+        todo!("implement Hash for instructions")
     }
 }
 
 impl Ord for InstructionWrapper {
     fn cmp(&self, _other: &Self) -> std::cmp::Ordering {
-        // See: https://github.com/mitsuhiko/similar/issues/50
         todo!("implement Ord for instructions")
     }
 }
