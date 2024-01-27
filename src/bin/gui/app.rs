@@ -81,7 +81,12 @@ fn draw_function_list(
     mode: &mut DiffViewerMode,
     ui: &mut egui::Ui,
 ) {
-    ui.heading("Functions");
+    ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+        ui.heading("Functions");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+            ui.heading(format!("{} changes found", changes.len()));
+        });
+    });
     ui.separator();
 
     egui::ScrollArea::vertical()
