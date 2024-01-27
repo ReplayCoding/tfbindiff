@@ -1,14 +1,13 @@
+use anyhow::Context;
 use byteorder::ByteOrder;
 use byteorder::ReadBytesExt;
 use num_enum::TryFromPrimitive;
-use num_enum::TryFromPrimitiveError;
 use std::collections::HashMap;
 use std::io;
 use std::io::Cursor;
 use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Seek;
-use thiserror::Error;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, TryFromPrimitive, Clone, Copy)]
@@ -50,44 +49,6 @@ pub enum EhPointerApplication {
     DW_EH_PE_aligned = 0x50,
 }
 
-#[derive(Debug, Error)]
-pub enum EhFrameError {
-    #[error("IO error: {0}")]
-    Io(io::Error),
-    #[error("LEB decode error: {0}")]
-    Leb(leb128::read::Error),
-    #[error("pointer format decode error: {0}")]
-    PointerFormatDecode(TryFromPrimitiveError<EhPointerFormat>),
-    #[error("pointer application decode error: {0}")]
-    PointerApplicationDecode(TryFromPrimitiveError<EhPointerApplication>),
-    #[error("invalid CIE {0} for parsing a FDE: {1}")]
-    InvalidCie(u64, &'static str),
-}
-
-impl From<io::Error> for EhFrameError {
-    fn from(value: io::Error) -> Self {
-        Self::Io(value)
-    }
-}
-
-impl From<leb128::read::Error> for EhFrameError {
-    fn from(value: leb128::read::Error) -> Self {
-        Self::Leb(value)
-    }
-}
-
-impl From<TryFromPrimitiveError<EhPointerFormat>> for EhFrameError {
-    fn from(value: TryFromPrimitiveError<EhPointerFormat>) -> Self {
-        Self::PointerFormatDecode(value)
-    }
-}
-
-impl From<TryFromPrimitiveError<EhPointerApplication>> for EhFrameError {
-    fn from(value: TryFromPrimitiveError<EhPointerApplication>) -> Self {
-        Self::PointerApplicationDecode(value)
-    }
-}
-
 #[derive(Debug)]
 pub struct Cie {
     pub fde_pointer_format: Option<EhPointerFormat>,
@@ -109,7 +70,7 @@ fn read_encoded_no_application<Endian: ByteOrder, R: Read + Seek>(
     data: &mut R,
     format: EhPointerFormat,
     pointer_size: usize,
-) -> Result<u64, EhFrameError> {
+) -> anyhow::Result<u64> {
     Ok(match format {
         EhPointerFormat::DW_EH_PE_absptr => match pointer_size {
             4 => data.read_u32::<Endian>()?.into(),
@@ -128,7 +89,7 @@ fn read_encoded<Endian: ByteOrder, R: Read + Seek>(
     application: EhPointerApplication,
     pointer_size: usize,
     base_address: u64,
-) -> Result<u64, EhFrameError> {
+) -> anyhow::Result<u64> {
     let pcrel_offs = data.stream_position()?;
     let unapplied_value = read_encoded_no_application::<Endian, _>(data, format, pointer_size)?;
     let applied_value: u64 = match application {
@@ -145,7 +106,7 @@ impl Cie {
     fn parse<Endian: ByteOrder, R: Read + Seek>(
         data: &mut R,
         pointer_size: usize,
-    ) -> Result<Self, EhFrameError> {
+    ) -> anyhow::Result<Self> {
         // Version
         // Version assigned to the call frame information structure. This value shall be 1.
         let version = data.read_u8()?;
@@ -311,31 +272,32 @@ impl Fde {
         cies: &HashMap<u64, Cie>,
         pointer_size: usize,
         base_address: u64,
-    ) -> Result<Self, EhFrameError> {
+    ) -> anyhow::Result<Self> {
         let offs = data.stream_position()?;
 
         // - 4 because the stream is currently *after* the CIE id, we want directly before
         let absolute_cie_pointer = offs - u64::from(cie_pointer) - 4;
         let cie = cies
             .get(&absolute_cie_pointer)
-            .ok_or(EhFrameError::InvalidCie(
-                absolute_cie_pointer,
-                "no such CIE",
-            ))?;
+            .with_context(|| format!("no such CIE @ {:08X}", absolute_cie_pointer))?;
 
         // PC Begin
         // An encoded value that indicates the address of the initial location associated with this
         // FDE. The encoding format is specified in the Augmentation Data.
         let pc_begin = read_encoded::<Endian, _>(
             data,
-            cie.fde_pointer_format.ok_or(EhFrameError::InvalidCie(
-                absolute_cie_pointer,
-                "no pointer format in the CIE",
-            ))?,
-            cie.fde_pointer_application.ok_or(EhFrameError::InvalidCie(
-                absolute_cie_pointer,
-                "no pointer application in the CIE",
-            ))?,
+            cie.fde_pointer_format.with_context(|| {
+                format!(
+                    "no pointer format in the CIE @ {:08X}",
+                    absolute_cie_pointer,
+                )
+            })?,
+            cie.fde_pointer_application.with_context(|| {
+                format!(
+                    "no pointer application in the CIE @ {:08X}",
+                    absolute_cie_pointer,
+                )
+            })?,
             pointer_size,
             base_address,
         )?;
@@ -346,10 +308,12 @@ impl Fde {
         // So it turns out that its encoded, but with application it gives the wrong result? WTF
         let pc_range = read_encoded_no_application::<Endian, _>(
             data,
-            cie.fde_pointer_format.ok_or(EhFrameError::InvalidCie(
-                absolute_cie_pointer,
-                "no pointer format in the CIE",
-            ))?,
+            cie.fde_pointer_format.with_context(|| {
+                format!(
+                    "no pointer format in the CIE @ {:08X}",
+                    absolute_cie_pointer,
+                )
+            })?,
             pointer_size,
         )?;
 
@@ -365,7 +329,7 @@ fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
     pointer_size: usize,
     cies: &HashMap<u64, Cie>,
     base_address: u64,
-) -> Result<Option<EhFrameEntry>, EhFrameError> {
+) -> anyhow::Result<Option<EhFrameEntry>> {
     let entry_offset = data.stream_position()?;
 
     // Length
@@ -439,7 +403,7 @@ pub fn get_fdes<Endian: ByteOrder, R: Read + Seek>(
     data: &mut R,
     pointer_size: usize,
     base_address: u64,
-) -> Result<Vec<Fde>, EhFrameError> {
+) -> anyhow::Result<Vec<Fde>> {
     let mut fdes: Vec<Fde> = vec![];
     let mut cies: HashMap<u64, Cie> = HashMap::new();
 
