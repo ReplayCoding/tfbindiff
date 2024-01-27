@@ -30,11 +30,6 @@ fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize) ->
 
     let mut has_difference = false;
 
-    // New bytes, something was added!
-    if func1.content().len() != func2.content().len() {
-        has_difference = true;
-    }
-
     let instructions1: Vec<InstructionWrapper> =
         InstructionIter::new(func1.address(), func1.content(), pointer_size).collect();
     let instructions2: Vec<InstructionWrapper> =
