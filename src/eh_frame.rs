@@ -115,7 +115,7 @@ fn read_encoded_no_application<Endian: ByteOrder, R: Read + Seek>(
             4 => data.read_u32::<Endian>()?.into(),
             _ => todo!("unhandled pointer size: {}", pointer_size),
         },
-        EhPointerFormat::DW_EH_PE_sdata4 => data.read_u32::<Endian>()?.into(),
+        EhPointerFormat::DW_EH_PE_sdata4 => data.read_i32::<Endian>()? as u64,
 
         _ => todo!("unhandled format {:?}", format),
     })
@@ -131,15 +131,10 @@ fn read_encoded<Endian: ByteOrder, R: Read + Seek>(
     let pcrel_offs = data.stream_position()?;
     let unapplied_value = read_encoded_no_application::<Endian, _>(data, format, pointer_size)?;
     let applied_value: u64 = match application {
-        EhPointerApplication::DW_EH_PE_pcrel => match pointer_size {
-            // Fairly certain there's something subtly wrong with this :)
-            4 => u32::try_from(base_address + pcrel_offs)
-                .unwrap()
-                .wrapping_add(u32::try_from(unapplied_value).unwrap())
-                .into(),
-            _ => todo!("unhandled pointer size: {}", pointer_size),
-        },
-
+        EhPointerApplication::DW_EH_PE_pcrel => base_address
+            .wrapping_add(pcrel_offs)
+            .wrapping_add(unapplied_value)
+            .into(),
         _ => todo!("unhandled application {:?}", application),
     };
 
