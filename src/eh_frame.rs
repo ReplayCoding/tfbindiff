@@ -99,7 +99,9 @@ fn read_encoded<Endian: ByteOrder, R: Read + Seek>(
         _ => todo!("unhandled application {:?}", application),
     };
 
-    Ok(applied_value)
+    // truncate addresses larger than address_size bytes
+    let max_address = 2u128.pow((pointer_size * 8) as u32) - 1;
+    Ok(applied_value & (max_address as u64))
 }
 
 impl Cie {
