@@ -4,6 +4,10 @@ version = "0.1.0"
 license = "MIT"
 edition = "2021"
 
+[[bin]]
+name = "tfbindiff"
+path = "src/bin/gui/main.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

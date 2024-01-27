@@ -1,16 +1,10 @@
-mod compare;
-mod eh_frame;
-mod gui;
-mod instruction_wrapper;
-mod matcher;
-mod program;
+mod app;
 mod split_diff;
-mod util;
 
-use crate::compare::compare_programs;
-use crate::program::Program;
 use std::fs;
 use std::path::Path;
+use tfbindiff::compare::compare_programs;
+use tfbindiff::program::Program;
 
 fn load_file(filename: &str) -> memmap2::Mmap {
     let file = fs::File::open(Path::new(filename)).unwrap();
@@ -32,5 +26,5 @@ fn main() {
 
     let changes = compare_programs(&program1, &program2);
 
-    gui::run(Box::leak(program1), Box::leak(program2), &changes);
+    app::run(Box::leak(program1), Box::leak(program2), &changes);
 }

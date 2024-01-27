@@ -2,10 +2,12 @@ use eframe::egui;
 use egui::RichText;
 use egui_extras::TableBuilder;
 
-use crate::{
+use tfbindiff::{
     compare::FunctionChange, instruction_wrapper::InstructionWrapper, program::Program,
-    split_diff::DiffCell, util::ProgramInstructionFormatter,
+    util::ProgramInstructionFormatter,
 };
+
+use crate::split_diff::DiffCell;
 
 struct CachedFunctionChange {
     name: String,
@@ -22,7 +24,7 @@ impl CachedFunctionChange {
         change: &FunctionChange,
     ) -> Self {
         Self {
-            name: crate::util::demangle_symbol(change.name())
+            name: tfbindiff::util::demangle_symbol(change.name())
                 .unwrap_or_else(|| change.name().to_string()),
             address1: change.address1(),
             address2: change.address2(),
