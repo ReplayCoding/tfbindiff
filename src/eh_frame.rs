@@ -113,6 +113,7 @@ fn read_encoded_no_application<Endian: ByteOrder, R: Read + Seek>(
     Ok(match format {
         EhPointerFormat::DW_EH_PE_absptr => match pointer_size {
             4 => data.read_u32::<Endian>()?.into(),
+            8 => data.read_u64::<Endian>()?.into(),
             _ => todo!("unhandled pointer size: {}", pointer_size),
         },
         EhPointerFormat::DW_EH_PE_sdata4 => data.read_i32::<Endian>()? as u64,
@@ -343,10 +344,15 @@ impl Fde {
         // PC Range
         // An absolute value that indicates the number of bytes of instructions associated with
         // this FDE.
-        let pc_range: u64 = match pointer_size {
-            4 => data.read_u32::<Endian>()?.into(),
-            _ => todo!("unhandled pointer size: {}", pointer_size),
-        };
+        // So it turns out that its encoded, but with application it gives the wrong result? WTF
+        let pc_range = read_encoded_no_application::<Endian, _>(
+            data,
+            cie.fde_pointer_format.ok_or(EhFrameError::InvalidCie(
+                absolute_cie_pointer,
+                "no pointer format in the CIE",
+            ))?,
+            pointer_size,
+        )?;
 
         Ok(Self {
             begin: pc_begin,
