@@ -113,7 +113,7 @@ fn read_encoded_no_application<Endian: ByteOrder, R: Read + Seek>(
     Ok(match format {
         EhPointerFormat::DW_EH_PE_absptr => match pointer_size {
             4 => data.read_u32::<Endian>()?.into(),
-            8 => data.read_u64::<Endian>()?.into(),
+            8 => data.read_u64::<Endian>()?,
             _ => todo!("unhandled pointer size: {}", pointer_size),
         },
         EhPointerFormat::DW_EH_PE_sdata4 => data.read_i32::<Endian>()? as u64,
@@ -134,8 +134,7 @@ fn read_encoded<Endian: ByteOrder, R: Read + Seek>(
     let applied_value: u64 = match application {
         EhPointerApplication::DW_EH_PE_pcrel => base_address
             .wrapping_add(pcrel_offs)
-            .wrapping_add(unapplied_value)
-            .into(),
+            .wrapping_add(unapplied_value),
         _ => todo!("unhandled application {:?}", application),
     };
 

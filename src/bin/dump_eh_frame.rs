@@ -1,8 +1,8 @@
-use std::fs;
-use std::path::Path;
-use std::io::Cursor;
 use byteorder::LittleEndian;
 use object::{Object, ObjectSection};
+use std::fs;
+use std::io::Cursor;
+use std::path::Path;
 use tfbindiff::eh_frame::get_fdes;
 
 fn load_file(filename: &str) -> memmap2::Mmap {

@@ -112,7 +112,8 @@ fn draw_diff_view(change: &CachedFunctionChange, mode: &mut DiffViewerMode, ui: 
             *mode = DiffViewerMode::FunctionList;
         }
 
-        ui.heading(format!("Comparing {}", &change.name)).on_hover_text(&change.mangled_name);
+        ui.heading(format!("Comparing {}", &change.name))
+            .on_hover_text(&change.mangled_name);
         // TODO: Make the addresses copyable
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
             ui.heading(format!(
