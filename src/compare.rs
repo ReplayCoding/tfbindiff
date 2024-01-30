@@ -2,6 +2,7 @@ use crate::instruction_wrapper::{InstructionIter, InstructionWrapper};
 use crate::matcher::FunctionMatcher;
 use crate::program::{Function, Program};
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
+use rayon::prelude::*;
 
 enum CompareResult {
     Same(),
@@ -113,7 +114,7 @@ pub fn compare_programs(program1: &Program, program2: &Program) -> Vec<FunctionC
 
     let mut changes: Vec<FunctionChange> = program1
         .functions
-        .iter()
+        .par_iter()
         .filter_map(|(name, func1)| {
             let func2 = matcher.match_name(name)?;
 
