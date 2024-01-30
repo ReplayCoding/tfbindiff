@@ -76,102 +76,6 @@ enum DiffViewerMode {
     Diff(usize),
 }
 
-fn draw_function_list(
-    changes: &[CachedFunctionChange],
-    mode: &mut DiffViewerMode,
-    ui: &mut egui::Ui,
-) {
-    ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
-        ui.heading("Functions");
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-            ui.heading(format!("{} changes found", changes.len()));
-        });
-    });
-    ui.separator();
-
-    egui::ScrollArea::vertical()
-        .auto_shrink([false, true])
-        .show_rows(
-            ui,
-            ui.text_style_height(&egui::TextStyle::Button),
-            changes.len(),
-            |ui, range| {
-                for idx in range {
-                    let row = &changes[idx];
-
-                    ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
-                        let button = ui.add(egui::Button::new(&row.name).frame(false));
-                        if button.clicked() {
-                            *mode = DiffViewerMode::Diff(idx);
-                        }
-                    });
-                }
-            },
-        );
-}
-
-fn draw_diff_view(change: &CachedFunctionChange, mode: &mut DiffViewerMode, ui: &mut egui::Ui) {
-    ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
-        let back_button = ui.button("Back");
-        if back_button.clicked() {
-            *mode = DiffViewerMode::FunctionList;
-        }
-
-        ui.heading(format!("Comparing {}", &change.name))
-            .on_hover_text(&change.mangled_name);
-        // TODO: Make the addresses copyable
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-            ui.heading(format!(
-                "{:08x} vs {:08x}",
-                change.address1, change.address2
-            ));
-        })
-    });
-    ui.separator();
-
-    ui.scope(|ui| {
-        let text_style = egui::TextStyle::Monospace;
-        let text_height = ui.text_style_height(&text_style);
-        ui.style_mut().override_text_style = Some(text_style);
-
-        let column_width = ui.available_width() / 2.0;
-        let available_height = ui.available_height();
-
-        let id = ui.id().with(change.address1);
-        ui.push_id(id, |ui| {
-            TableBuilder::new(ui)
-                .striped(false)
-                .cell_layout(egui::Layout::left_to_right(egui::Align::Min))
-                .resizable(false)
-                .auto_shrink([false, false])
-                .columns(egui_extras::Column::exact(column_width), 2)
-                .min_scrolled_height(available_height)
-                .body(|body| {
-                    body.rows(text_height, change.lines.len(), |mut row| {
-                        let (line1, line2) = &change.lines[row.index()];
-                        let build_line = |line: &DiffCell<String>| match line {
-                            DiffCell::Hidden => RichText::new(""),
-                            DiffCell::Collapsed => RichText::new("..."),
-
-                            DiffCell::Default(line) => RichText::new(line),
-                            DiffCell::Insert(line) => {
-                                RichText::new(line).color(egui::Color32::GREEN)
-                            }
-                            DiffCell::Delete(line) => RichText::new(line).color(egui::Color32::RED),
-                        };
-
-                        row.col(|ui| {
-                            ui.label(build_line(line1));
-                        });
-                        row.col(|ui| {
-                            ui.label(build_line(line2));
-                        });
-                    });
-                });
-        })
-    });
-}
-
 struct DiffViewerApp {
     changes: Vec<CachedFunctionChange>,
     mode: DiffViewerMode,
@@ -196,13 +100,115 @@ impl DiffViewerApp {
                 .collect(),
         }
     }
+
+    fn draw_function_list(
+        changes: &[CachedFunctionChange],
+        mode: &mut DiffViewerMode,
+        ui: &mut egui::Ui,
+    ) {
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+            ui.heading("Functions");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                ui.heading(format!("{} changes found", changes.len()));
+            });
+        });
+        ui.separator();
+
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, true])
+            .show_rows(
+                ui,
+                ui.text_style_height(&egui::TextStyle::Button),
+                changes.len(),
+                |ui, range| {
+                    for idx in range {
+                        let row = &changes[idx];
+
+                        ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                            let button = ui.add(egui::Button::new(&row.name).frame(false));
+                            if button.clicked() {
+                                *mode = DiffViewerMode::Diff(idx);
+                            }
+                        });
+                    }
+                },
+            );
+    }
+
+    fn draw_diff_view(change: &CachedFunctionChange, mode: &mut DiffViewerMode, ui: &mut egui::Ui) {
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+            let back_button = ui.button("Back");
+            if back_button.clicked() {
+                *mode = DiffViewerMode::FunctionList;
+            }
+
+            ui.heading(format!("Comparing {}", &change.name))
+                .on_hover_text(&change.mangled_name);
+            // TODO: Make the addresses copyable
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                ui.heading(format!(
+                    "{:08x} vs {:08x}",
+                    change.address1, change.address2
+                ));
+            })
+        });
+        ui.separator();
+
+        ui.scope(|ui| {
+            let text_style = egui::TextStyle::Monospace;
+            let text_height = ui.text_style_height(&text_style);
+            ui.style_mut().override_text_style = Some(text_style);
+
+            let column_width = ui.available_width() / 2.0;
+            let available_height = ui.available_height();
+
+            let id = ui.id().with(change.address1);
+            ui.push_id(id, |ui| {
+                TableBuilder::new(ui)
+                    .striped(false)
+                    .cell_layout(egui::Layout::left_to_right(egui::Align::Min))
+                    .resizable(false)
+                    .auto_shrink([false, false])
+                    .columns(egui_extras::Column::exact(column_width), 2)
+                    .min_scrolled_height(available_height)
+                    .body(|body| {
+                        body.rows(text_height, change.lines.len(), |mut row| {
+                            let (line1, line2) = &change.lines[row.index()];
+                            let build_line = |line: &DiffCell<String>| match line {
+                                DiffCell::Hidden => RichText::new(""),
+                                DiffCell::Collapsed => RichText::new("..."),
+
+                                DiffCell::Default(line) => RichText::new(line),
+                                DiffCell::Insert(line) => {
+                                    RichText::new(line).color(egui::Color32::GREEN)
+                                }
+                                DiffCell::Delete(line) => {
+                                    RichText::new(line).color(egui::Color32::RED)
+                                }
+                            };
+
+                            row.col(|ui| {
+                                ui.label(build_line(line1));
+                            });
+                            row.col(|ui| {
+                                ui.label(build_line(line2));
+                            });
+                        });
+                    });
+            })
+        });
+    }
 }
 
 impl eframe::App for DiffViewerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| match self.mode {
-            DiffViewerMode::FunctionList => draw_function_list(&self.changes, &mut self.mode, ui),
-            DiffViewerMode::Diff(idx) => draw_diff_view(&self.changes[idx], &mut self.mode, ui),
+            DiffViewerMode::FunctionList => {
+                Self::draw_function_list(&self.changes, &mut self.mode, ui)
+            }
+            DiffViewerMode::Diff(idx) => {
+                Self::draw_diff_view(&self.changes[idx], &mut self.mode, ui)
+            }
         });
     }
 }
