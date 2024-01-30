@@ -23,10 +23,10 @@ impl CachedFunctionChange {
         program1: &'static Program,
         program2: &'static Program,
         change: &FunctionChange,
+        name: &str,
     ) -> Self {
         Self {
-            name: tfbindiff::util::demangle_symbol(change.name())
-                .unwrap_or_else(|| change.name().to_string()),
+            name: name.to_string(),
             mangled_name: change.name().to_string(),
             address1: change.address1(),
             address2: change.address2(),
@@ -40,8 +40,11 @@ impl CachedFunctionChange {
         change: &FunctionChange,
     ) -> Vec<(DiffCell<String>, DiffCell<String>)> {
         let (instructions1, instructions2) = change.instructions();
+        // NOTE: Lcs panics on oob, wtf?
+        let diff_ops =
+            similar::capture_diff_slices(similar::Algorithm::Myers, instructions1, instructions2);
 
-        let split_diff = crate::split_diff::build(instructions1, instructions2, change.diff_ops());
+        let split_diff = crate::split_diff::build(instructions1, instructions2, &diff_ops);
 
         let mut formatter1 = ProgramInstructionFormatter::new(program1);
         let mut formatter2 = ProgramInstructionFormatter::new(program2);
@@ -73,11 +76,15 @@ impl CachedFunctionChange {
 
 enum DiffViewerMode {
     FunctionList,
-    Diff(usize),
+    Diff,
 }
 
 struct DiffViewerApp {
-    changes: Vec<CachedFunctionChange>,
+    program1: &'static Program,
+    program2: &'static Program,
+
+    changes: Vec<(String, FunctionChange)>,
+    current_cached_change: Option<CachedFunctionChange>,
     mode: DiffViewerMode,
 }
 
@@ -93,23 +100,29 @@ impl DiffViewerApp {
         // Use the cc.gl (a glow::Context) to create graphics shaders and buffers that you can use
         // for e.g. egui::PaintCallback.
         Self {
-            mode: DiffViewerMode::FunctionList,
+            program1,
+            program2,
+
             changes: changes
-                .iter()
-                .map(|c| CachedFunctionChange::new(program1, program2, c))
+                .into_iter()
+                .map(|change| {
+                    (
+                        tfbindiff::util::demangle_symbol(change.name())
+                            .unwrap_or_else(|| change.name().to_string()),
+                        change,
+                    )
+                })
                 .collect(),
+            current_cached_change: None,
+            mode: DiffViewerMode::FunctionList,
         }
     }
 
-    fn draw_function_list(
-        changes: &[CachedFunctionChange],
-        mode: &mut DiffViewerMode,
-        ui: &mut egui::Ui,
-    ) {
+    fn draw_function_list(&mut self, ui: &mut egui::Ui) {
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
             ui.heading("Functions");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                ui.heading(format!("{} changes found", changes.len()));
+                ui.heading(format!("{} changes found", self.changes.len()));
             });
         });
         ui.separator();
@@ -119,15 +132,21 @@ impl DiffViewerApp {
             .show_rows(
                 ui,
                 ui.text_style_height(&egui::TextStyle::Button),
-                changes.len(),
+                self.changes.len(),
                 |ui, range| {
                     for idx in range {
-                        let row = &changes[idx];
+                        let (name, change) = &self.changes[idx];
 
                         ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
-                            let button = ui.add(egui::Button::new(&row.name).frame(false));
+                            let button = ui.add(egui::Button::new(name).frame(false));
                             if button.clicked() {
-                                *mode = DiffViewerMode::Diff(idx);
+                                self.current_cached_change = Some(CachedFunctionChange::new(
+                                    self.program1,
+                                    self.program2,
+                                    change,
+                                    name,
+                                ));
+                                self.mode = DiffViewerMode::Diff;
                             }
                         });
                     }
@@ -135,11 +154,16 @@ impl DiffViewerApp {
             );
     }
 
-    fn draw_diff_view(change: &CachedFunctionChange, mode: &mut DiffViewerMode, ui: &mut egui::Ui) {
+    fn draw_diff_view(&mut self, ui: &mut egui::Ui) {
+        let change = self
+            .current_cached_change
+            .as_ref()
+            .expect("current cached change should never be None here");
+
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
             let back_button = ui.button("Back");
             if back_button.clicked() {
-                *mode = DiffViewerMode::FunctionList;
+                self.mode = DiffViewerMode::FunctionList;
             }
 
             ui.heading(format!("Comparing {}", &change.name))
@@ -203,19 +227,13 @@ impl DiffViewerApp {
 impl eframe::App for DiffViewerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| match self.mode {
-            DiffViewerMode::FunctionList => {
-                Self::draw_function_list(&self.changes, &mut self.mode, ui)
-            }
-            DiffViewerMode::Diff(idx) => {
-                Self::draw_diff_view(&self.changes[idx], &mut self.mode, ui)
-            }
+            DiffViewerMode::FunctionList => self.draw_function_list(ui),
+            DiffViewerMode::Diff => self.draw_diff_view(ui),
         });
     }
 }
 
-pub fn run(program1: &'static Program, program2: &'static Program, changes: &[FunctionChange]) {
-    let changes = changes.to_vec();
-
+pub fn run(program1: &'static Program, program2: &'static Program, changes: Vec<FunctionChange>) {
     eframe::run_native(
         "tfbindiff viewer",
         eframe::NativeOptions::default(),

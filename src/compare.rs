@@ -10,7 +10,6 @@ enum CompareResult {
 
 #[derive(Clone)]
 struct CompareInfo {
-    diff_ops: Vec<similar::DiffOp>,
     instructions: (Vec<InstructionWrapper>, Vec<InstructionWrapper>),
 }
 
@@ -62,12 +61,6 @@ fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize) ->
 
     if has_difference {
         CompareResult::Differs(CompareInfo {
-            // NOTE: Lcs panics on oob, wtf?
-            diff_ops: similar::capture_diff_slices(
-                similar::Algorithm::Myers,
-                &instructions1,
-                &instructions2,
-            ),
             instructions: (instructions1, instructions2),
         })
     } else {
@@ -95,10 +88,6 @@ impl FunctionChange {
 
     pub fn name(&self) -> &str {
         &self.name
-    }
-
-    pub fn diff_ops(&self) -> &[similar::DiffOp] {
-        &self.info.diff_ops
     }
 
     pub fn instructions(&self) -> (&[InstructionWrapper], &[InstructionWrapper]) {

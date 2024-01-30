@@ -26,5 +26,5 @@ fn main() {
 
     let changes = compare_programs(&program1, &program2);
 
-    app::run(Box::leak(program1), Box::leak(program2), &changes);
+    app::run(Box::leak(program1), Box::leak(program2), changes);
 }
