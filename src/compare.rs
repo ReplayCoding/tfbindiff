@@ -22,18 +22,27 @@ fn get_stack_depth_from_instruction(instr: &Instruction) -> i64 {
     }
 }
 
-fn compare_functions(func1: &Function, func2: &Function, pointer_size: usize) -> CompareResult {
+fn compare_functions(
+    program1: &Program,
+    program2: &Program,
+    func1: &Function,
+    func2: &Function,
+    pointer_size: usize,
+) -> CompareResult {
+    let func1_content = program1.get_data_for_function(func1).unwrap();
+    let func2_content = program2.get_data_for_function(func2).unwrap();
+
     // If the bytes are the exact same, then there is no difference
-    if func1.content() == func2.content() {
+    if func1_content == func2_content {
         return CompareResult::Same();
     }
 
     let mut has_difference = false;
 
     let instructions1: Vec<InstructionWrapper> =
-        InstructionIter::new(func1.address(), func1.content(), pointer_size).collect();
+        InstructionIter::new(func1.address(), func1_content, pointer_size).collect();
     let instructions2: Vec<InstructionWrapper> =
-        InstructionIter::new(func2.address(), func2.content(), pointer_size).collect();
+        InstructionIter::new(func2.address(), func2_content, pointer_size).collect();
 
     if instructions1 != instructions2 {
         has_difference = true;
@@ -118,7 +127,7 @@ pub fn compare_programs(program1: &Program, program2: &Program) -> Vec<FunctionC
         .filter_map(|(name, func1)| {
             let func2 = matcher.match_name(name)?;
 
-            match compare_functions(func1, func2, program1.pointer_size) {
+            match compare_functions(program1, program2, func1, func2, program1.pointer_size) {
                 CompareResult::Differs(compare_info) => Some(FunctionChange::new(
                     compare_info,
                     name.to_string(),

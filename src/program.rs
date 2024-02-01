@@ -1,25 +1,29 @@
 use crate::eh_frame::get_fdes;
 use byteorder::LittleEndian;
-use object::{Object, ObjectSection};
+use object::{Object, ObjectSection, SectionIndex};
 use std::collections::HashMap;
 use std::io::Cursor;
 
 pub struct Function {
+    section_idx: SectionIndex,
+    section_base: u64,
+
     address: u64,
-    content: Vec<u8>,
+    length: usize,
 }
 
 impl Function {
-    pub fn new(address: u64, content: Vec<u8>) -> Self {
-        Self { address, content }
+    pub fn new(section_id: SectionIndex, section_base: u64, address: u64, length: u64) -> Self {
+        Self {
+            address,
+            section_base,
+            section_idx: section_id,
+            length: length as usize,
+        }
     }
 
     pub fn address(&self) -> u64 {
         self.address
-    }
-
-    pub fn content(&self) -> &[u8] {
-        &self.content
     }
 }
 
@@ -27,24 +31,31 @@ pub struct Program {
     pub pointer_size: usize,
     pub functions: HashMap<String, Function>,
     pub symbol_map: HashMap<u64, String>,
+    pub sections: HashMap<SectionIndex, Vec<u8>>,
 }
 
 impl Program {
-    fn get_data_at_address(object: &object::File<'_>, address: u64, size: u64) -> Option<Vec<u8>> {
+    pub fn get_data_for_function(&self, function: &Function) -> Option<&[u8]> {
+        let section = self
+            .sections
+            .get(&function.section_idx)
+            .expect("Section Index should never be invalid");
+
+        let relative_address = (function.address - function.section_base) as usize;
+
+        Some(&section[relative_address..relative_address + function.length])
+    }
+
+    fn get_section_for_data(
+        object: &object::File<'_>,
+        address: u64,
+    ) -> Option<(u64, SectionIndex)> {
         for section in object.sections() {
             if section.address() > address || (section.address() + section.size()) <= address {
                 continue;
             }
 
-            return if let Ok(section_data) = section.uncompressed_data() {
-                let relative_address = address - section.address();
-                let data = &section_data[(usize::try_from(relative_address)).ok()?
-                    ..usize::try_from(relative_address + size).ok()?];
-
-                Some(data.to_vec())
-            } else {
-                None
-            };
+            return Some((section.address(), section.index()));
         }
 
         None
@@ -74,14 +85,27 @@ impl Program {
             .map(|s| (s.address(), s.name().to_string()))
             .collect();
 
+        let mut sections = HashMap::new();
         for fde in fdes {
             if let Some(name) = symbol_map.get(&fde.begin) {
+                let (section_base, section_idx) =
+                    Self::get_section_for_data(&object, fde.begin).unwrap();
+
+                if !sections.contains_key(&section_idx) {
+                    sections.insert(
+                        section_idx,
+                        object
+                            .section_by_index(section_idx)
+                            .unwrap()
+                            .uncompressed_data()
+                            .unwrap()
+                            .to_vec(),
+                    );
+                };
+
                 functions.insert(
                     name.to_string(),
-                    Function::new(
-                        fde.begin,
-                        Self::get_data_at_address(&object, fde.begin, fde.length).unwrap(),
-                    ),
+                    Function::new(section_idx, section_base, fde.begin, fde.length),
                 );
             } else {
                 println!(
@@ -94,6 +118,7 @@ impl Program {
         Self {
             pointer_size,
             functions,
+            sections,
             symbol_map,
         }
     }
