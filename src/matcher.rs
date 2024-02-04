@@ -1,59 +1,52 @@
 use crate::program::{Function, Program};
-use once_cell::sync::Lazy;
-use regex_lite::Regex;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-static STATIC_INITIALIZER_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^_?_GLOBAL__sub_I_(.*)\.stdout\.rel_tf_osx_builder\..*\.ii$").unwrap()
-});
+pub enum MatchResult<'a> {
+    Matched((&'a Function, &'a Function)),
+    Unmatched,
+    Finished,
+}
 
 pub struct FunctionMatcher<'a> {
-    program: &'a Program,
-    static_init_map: HashMap<String, &'a str>,
+    program1_functions: Vec<(&'a str, &'a Function)>,
+    program2_functions: HashMap<&'a str, &'a Function>,
+
+    program1_unmatched: Vec<(&'a str, &'a Function)>,
 }
 
 impl<'a> FunctionMatcher<'a> {
-    pub fn new(program: &'a Program) -> Self {
-        let static_init_map = Self::build_static_init_map(&program.functions);
+    pub fn new(program1: &'a Program, program2: &'a Program) -> Self {
         Self {
-            program,
-            static_init_map,
+            program1_functions: program1
+                .functions
+                .iter()
+                .map(|(k, v)| (k.as_str(), v))
+                .collect(),
+            program2_functions: program2
+                .functions
+                .iter()
+                .map(|(k, v)| (k.as_str(), v))
+                .collect(),
+
+            program1_unmatched: vec![],
         }
     }
 
-    pub fn match_name(&self, name: &str) -> Option<&'a Function> {
-        if let Some(func2) = self.program.functions.get(name) {
-            Some(func2)
-        } else if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name) {
-            let extracted_filename = &captures[1];
-            let name2 = self.static_init_map.get(extracted_filename)?;
-
-            self.program.functions.get(*name2)
-        } else {
-            None
-        }
-    }
-
-    fn build_static_init_map(functions: &HashMap<String, Function>) -> HashMap<String, &str> {
-        let mut static_initializers_to_note: HashMap<String, &str> = Default::default();
-
-        let mut static_initializer_blocklist: HashSet<String> = Default::default();
-        for name in functions.keys() {
-            if let Some(captures) = STATIC_INITIALIZER_REGEX.captures(name) {
-                let extracted_filename = captures.get(1).unwrap().as_str();
-                if static_initializer_blocklist.contains(extracted_filename) {
-                    continue;
-                }
-
-                if !static_initializers_to_note.contains_key(extracted_filename) {
-                    static_initializers_to_note.insert(extracted_filename.to_string(), name);
-                } else {
-                    static_initializers_to_note.remove(extracted_filename);
-                    static_initializer_blocklist.insert(extracted_filename.to_string());
-                }
+    pub fn next_match(&mut self) -> MatchResult<'a> {
+        if let Some((func1_name, func1)) = self.program1_functions.pop() {
+            if let Some(func2) = self.program2_functions.remove(&func1_name) {
+                return MatchResult::Matched((func1, func2));
             }
+
+            self.program1_unmatched.push((func1_name, func1));
+            return MatchResult::Unmatched;
         }
 
-        static_initializers_to_note
+        MatchResult::Finished
+    }
+
+    pub fn get_unmatched(self) -> (Vec<(&'a str, &'a Function)>, Vec<(&'a str, &'a Function)>) {
+        let program2_unmatched = self.program2_functions.into_iter().collect();
+        (self.program1_unmatched, program2_unmatched)
     }
 }

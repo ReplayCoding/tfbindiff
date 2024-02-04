@@ -1,8 +1,7 @@
 use crate::instruction_wrapper::{InstructionIter, InstructionWrapper};
-use crate::matcher::FunctionMatcher;
+use crate::matcher::{FunctionMatcher, MatchResult};
 use crate::program::{Function, Program};
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
-use rayon::prelude::*;
 
 enum CompareResult {
     Same(),
@@ -22,27 +21,21 @@ fn get_stack_depth_from_instruction(instr: &Instruction) -> i64 {
     }
 }
 
+fn create_instruction_iter<'a>(program: &'a Program, func: &Function) -> InstructionIter<'a> {
+    let func_content = program.get_data_for_function(func).unwrap();
+    InstructionIter::new(func.address(), func_content, program.pointer_size)
+}
+
 fn compare_functions(
     program1: &Program,
     program2: &Program,
     func1: &Function,
     func2: &Function,
-    pointer_size: usize,
 ) -> CompareResult {
-    let func1_content = program1.get_data_for_function(func1).unwrap();
-    let func2_content = program2.get_data_for_function(func2).unwrap();
-
-    // If the bytes are the exact same, then there is no difference
-    if func1_content == func2_content {
-        return CompareResult::Same();
-    }
-
     let mut has_difference = false;
 
-    let instructions1: Vec<InstructionWrapper> =
-        InstructionIter::new(func1.address(), func1_content, pointer_size).collect();
-    let instructions2: Vec<InstructionWrapper> =
-        InstructionIter::new(func2.address(), func2_content, pointer_size).collect();
+    let instructions1: Vec<InstructionWrapper> = create_instruction_iter(program1, func1).collect();
+    let instructions2: Vec<InstructionWrapper> = create_instruction_iter(program2, func2).collect();
 
     if instructions1 != instructions2 {
         has_difference = true;
@@ -119,27 +112,33 @@ pub fn compare_programs(program1: &Program, program2: &Program) -> Vec<FunctionC
         "pointer sizes don't match"
     );
 
-    let matcher = FunctionMatcher::new(program2);
+    let mut matcher = FunctionMatcher::new(program1, program2);
 
-    let mut changes: Vec<FunctionChange> = program1
-        .functions
-        .par_iter()
-        .filter_map(|(name, func1)| {
-            let func2 = matcher.match_name(name)?;
-
-            match compare_functions(program1, program2, func1, func2, program1.pointer_size) {
-                CompareResult::Differs(compare_info) => Some(FunctionChange::new(
-                    compare_info,
-                    name.to_string(),
-                    func1.address(),
-                    func2.address(),
-                )),
-                CompareResult::Same() => None,
+    let mut changes: Vec<FunctionChange> = vec![];
+    loop {
+        match matcher.next_match() {
+            MatchResult::Matched((func1, func2)) => {
+                if let CompareResult::Differs(compare_info) =
+                    compare_functions(program1, program2, func1, func2)
+                {
+                    let name = program1.symbol_map.get(&func1.address()).unwrap();
+                    changes.push(FunctionChange::new(
+                        compare_info,
+                        name.to_string(),
+                        func1.address(),
+                        func2.address(),
+                    ));
+                }
             }
-        })
-        .collect();
+            MatchResult::Unmatched => (),
+            MatchResult::Finished => break,
+        }
+    }
 
     changes.sort_by(|a, b| a.address1.cmp(&b.address1));
+
+    // TODO: return this for usage in the GUI
+    let (_program1_unmatched, _program2_unmatched) = matcher.get_unmatched();
 
     changes
 }

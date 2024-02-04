@@ -2406,7 +2406,6 @@ dependencies = [
  "memmap2",
  "num_enum",
  "object",
- "once_cell",
  "rayon",
  "regex-lite",
  "similar",
