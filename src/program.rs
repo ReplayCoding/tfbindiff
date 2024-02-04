@@ -69,7 +69,7 @@ impl Program {
         let eh_frame = object.section_by_name(".eh_frame").unwrap();
         let eh_frame_data = eh_frame.uncompressed_data().unwrap();
 
-        // FIXME: not that it actually matters, but this shouldn't be hardcoded
+        // FIXME: not that it actually matters, but endian shouldn't be hardcoded
         let fdes = get_fdes::<LittleEndian, _>(
             &mut Cursor::new(eh_frame_data),
             pointer_size,
