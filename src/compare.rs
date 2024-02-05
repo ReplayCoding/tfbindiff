@@ -2,6 +2,7 @@ use crate::instruction_wrapper::{InstructionIter, InstructionWrapper};
 use crate::matcher::{FunctionMatcher, MatchResult};
 use crate::program::{Function, Program};
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
+use itertools::Itertools;
 
 enum CompareResult {
     Same(),
@@ -34,35 +35,46 @@ fn compare_functions(
 ) -> CompareResult {
     let mut has_difference = false;
 
-    let instructions1: Vec<InstructionWrapper> = create_instruction_iter(program1, func1).collect();
-    let instructions2: Vec<InstructionWrapper> = create_instruction_iter(program2, func2).collect();
+    let instructions1 = create_instruction_iter(program1, func1);
+    let instructions2 = create_instruction_iter(program2, func2);
 
-    if instructions1 != instructions2 {
-        has_difference = true;
-    }
+    for zipped in instructions1.zip_longest(instructions2) {
+        match zipped {
+            itertools::EitherOrBoth::Both(instr1, instr2) => {
+                if instr1 != instr2 {
+                    has_difference = true;
+                    break;
+                }
 
-    for (instr1, instr2) in std::iter::zip(&instructions1, &instructions2) {
-        // Opcode matches, let's check for stack depth
-        // FIXME: Only handles 32-bit register
-        // sub esp, <depth>
-        if instr1.get().mnemonic() == Mnemonic::Sub
-            && instr1.get().op0_kind() == OpKind::Register
-            && instr1.get().op0_register() == Register::ESP
-            && instr2.get().op0_kind() == OpKind::Register
-            && instr2.get().op0_register() == Register::ESP
-        {
-            let stack_depth1: i64 = get_stack_depth_from_instruction(instr1.get());
-            let stack_depth2: i64 = get_stack_depth_from_instruction(instr2.get());
+                // Opcode matches, let's check for stack depth
+                // FIXME: Only handles 32-bit register
+                // sub esp, <depth>
+                if instr1.get().mnemonic() == Mnemonic::Sub
+                    && instr1.get().op0_kind() == OpKind::Register
+                    && instr1.get().op0_register() == Register::ESP
+                    && instr2.get().op0_kind() == OpKind::Register
+                    && instr2.get().op0_register() == Register::ESP
+                {
+                    let stack_depth1: i64 = get_stack_depth_from_instruction(instr1.get());
+                    let stack_depth2: i64 = get_stack_depth_from_instruction(instr2.get());
 
-            if stack_depth1 != stack_depth2 {
-                has_difference = true;
+                    if stack_depth1 != stack_depth2 {
+                        has_difference = true;
+                    }
+
+                    break;
+                }
             }
-
-            break;
+            itertools::EitherOrBoth::Left(_) | itertools::EitherOrBoth::Right(_) => {
+                has_difference = true;
+                break;
+            }
         }
     }
 
     if has_difference {
+        let instructions1 = create_instruction_iter(program1, func1).collect();
+        let instructions2 = create_instruction_iter(program2, func2).collect();
         CompareResult::Differs(CompareInfo {
             instructions: (instructions1, instructions2),
         })
