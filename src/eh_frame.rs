@@ -2,7 +2,7 @@ use anyhow::Context;
 use byteorder::ByteOrder;
 use byteorder::ReadBytesExt;
 use num_enum::TryFromPrimitive;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::io;
 use std::io::Cursor;
 use std::io::ErrorKind;
@@ -271,7 +271,7 @@ impl Fde {
     fn parse<Endian: ByteOrder, R: Read + Seek>(
         data: &mut R,
         cie_pointer: u32,
-        cies: &HashMap<u64, Cie>,
+        cies: &FxHashMap<u64, Cie>,
         pointer_size: usize,
         base_address: u64,
     ) -> anyhow::Result<Self> {
@@ -329,7 +329,7 @@ impl Fde {
 fn parse_eh_frame_entry<Endian: ByteOrder, R: Read + Seek>(
     data: &mut R,
     pointer_size: usize,
-    cies: &HashMap<u64, Cie>,
+    cies: &FxHashMap<u64, Cie>,
     base_address: u64,
 ) -> anyhow::Result<Option<EhFrameEntry>> {
     let entry_offset = data.stream_position()?;
@@ -407,7 +407,7 @@ pub fn get_fdes<Endian: ByteOrder, R: Read + Seek>(
     base_address: u64,
 ) -> anyhow::Result<Vec<Fde>> {
     let mut fdes: Vec<Fde> = vec![];
-    let mut cies: HashMap<u64, Cie> = HashMap::new();
+    let mut cies: FxHashMap<u64, Cie> = FxHashMap::default();
 
     while let Some(entry) =
         parse_eh_frame_entry::<Endian, _>(data, pointer_size, &cies, base_address)?

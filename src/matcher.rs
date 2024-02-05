@@ -1,5 +1,5 @@
 use crate::program::{Function, Program};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 pub enum MatchResult<'a> {
     Matched((&'a Function, &'a Function)),
@@ -9,7 +9,7 @@ pub enum MatchResult<'a> {
 
 pub struct FunctionMatcher<'a> {
     program1_functions: Vec<(&'a str, &'a Function)>,
-    program2_functions: HashMap<&'a str, &'a Function>,
+    program2_functions: FxHashMap<&'a str, &'a Function>,
 
     program1_unmatched: Vec<(&'a str, &'a Function)>,
 }

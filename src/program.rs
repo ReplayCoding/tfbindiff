@@ -1,7 +1,7 @@
 use crate::eh_frame::get_fdes;
 use byteorder::LittleEndian;
 use object::{Object, ObjectSection, SectionIndex};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::io::Cursor;
 
 pub struct Function {
@@ -29,9 +29,9 @@ impl Function {
 
 pub struct Program {
     pub pointer_size: usize,
-    pub functions: HashMap<String, Function>,
-    pub symbol_map: HashMap<u64, String>,
-    pub sections: HashMap<SectionIndex, Vec<u8>>,
+    pub functions: FxHashMap<String, Function>,
+    pub symbol_map: FxHashMap<u64, String>,
+    pub sections: FxHashMap<SectionIndex, Vec<u8>>,
 }
 
 impl Program {
@@ -77,15 +77,15 @@ impl Program {
         )
         .unwrap();
 
-        let mut functions: HashMap<String, Function> = HashMap::new();
-        let symbol_map: HashMap<u64, String> = object
+        let mut functions: FxHashMap<String, Function> = FxHashMap::default();
+        let symbol_map: FxHashMap<u64, String> = object
             .symbol_map()
             .symbols()
             .iter()
             .map(|s| (s.address(), s.name().to_string()))
             .collect();
 
-        let mut sections = HashMap::new();
+        let mut sections = FxHashMap::default();
         for fde in fdes {
             if let Some(name) = symbol_map.get(&fde.begin) {
                 let (section_base, section_idx) =
