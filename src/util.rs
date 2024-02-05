@@ -5,7 +5,7 @@ use iced_x86::Formatter;
 
 pub fn demangle_symbol(name: &str) -> Option<String> {
     let sym = cpp_demangle::Symbol::new(name).ok()?;
-    let options = DemangleOptions::new().no_params();
+    let options = DemangleOptions::new();
 
     sym.demangle(&options).ok()
 }
