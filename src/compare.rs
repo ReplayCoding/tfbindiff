@@ -14,10 +14,11 @@ struct CompareInfo {
     instructions: (Vec<InstructionWrapper>, Vec<InstructionWrapper>),
 }
 
-fn get_stack_depth_from_instruction(instr: &Instruction) -> i64 {
+fn get_stack_depth_from_instruction(instr: &Instruction) -> Option<i64> {
     match instr.op1_kind() {
-        OpKind::Immediate8to32 => instr.immediate8to32().into(),
-        OpKind::Immediate32 => instr.immediate32().into(),
+        OpKind::Immediate8to32 => Some(instr.immediate8to32().into()),
+        OpKind::Immediate32 => Some(instr.immediate32().into()),
+        OpKind::Register => None,
         _ => todo!("stack depth: unhandled op1 type {:?}", instr.op1_kind()),
     }
 }
@@ -55,8 +56,8 @@ fn compare_functions(
                     && instr2.get().op0_kind() == OpKind::Register
                     && instr2.get().op0_register() == Register::ESP
                 {
-                    let stack_depth1: i64 = get_stack_depth_from_instruction(instr1.get());
-                    let stack_depth2: i64 = get_stack_depth_from_instruction(instr2.get());
+                    let stack_depth1 = get_stack_depth_from_instruction(instr1.get());
+                    let stack_depth2 = get_stack_depth_from_instruction(instr2.get());
 
                     if stack_depth1 != stack_depth2 {
                         has_difference = true;
